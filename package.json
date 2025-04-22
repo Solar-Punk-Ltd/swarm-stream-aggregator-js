@@ -1,0 +1,57 @@
+{
+  "name": "@solarpunkltd/swarm-stream-aggregator-js",
+  "version": "1.0.0",
+  "description": "Node.js service for aggregating Swarm stream messages (GSOC project)",
+  "license": "Apache-2.0",
+  "keywords": [
+    "swarm",
+    "js",
+    "stream",
+    "GSOC",
+    "aggregator"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Solar-Punk-Ltd/swarm-stream-aggregator-js"
+  },
+  "bugs": {
+    "url": "https://github.com/Solar-Punk-Ltd/swarm-stream-aggregator-js/issues"
+  },
+  "author": "levente.kiss@solarpunk.buzz",
+  "scripts": {
+    "prepare": "husky",
+    "dev": "ts-node -r dotenv/config src/index.ts",
+    "build": "tsc",
+    "lint": "eslint . --ext .ts --report-unused-disable-directives --max-warnings 0",
+    "lint:fix": "npm run lint -- --fix",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@coral-xyz/anchor": "^0.31.0",
+    "@ethersphere/bee-js": "^9.0.3",
+    "@solana/web3.js": "^1.98.0",
+    "dotenv": "^16.4.7",
+    "ethers": "^6.13.5"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^19.8.0",
+    "@commitlint/config-conventional": "^19.8.0",
+    "@types/node": "^22.7.5",
+    "@typescript-eslint/eslint-plugin": "^6.14.0",
+    "@typescript-eslint/parser": "^6.14.0",
+    "eslint": "^8.55.0",
+    "eslint-config-prettier": "^8.10.0",
+    "eslint-plugin-import": "^2.29.1",
+    "eslint-plugin-prettier": "^4.2.1",
+    "eslint-plugin-simple-import-sort": "^10.0.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^15.5.0",
+    "prettier": "^2.8.8",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.8.2"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ]
+}
