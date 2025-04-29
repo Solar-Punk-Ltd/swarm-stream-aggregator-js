@@ -113,7 +113,7 @@ export class SwarmAggregator {
     const jsonPreviousState = previousState.toJSON() as any[];
 
     const filteredState = jsonPreviousState.filter(
-      (entry) => entry.owner !== newData.owner || entry.topic !== newData.topic,
+      entry => entry.owner !== newData.owner || entry.topic !== newData.topic,
     );
 
     filteredState.push(newData);
