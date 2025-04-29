@@ -1,7 +1,7 @@
 module.exports = {
   apps: [
     {
-      name: 'ingestion',
+      name: 'swarm-agg',
       script: 'dist/src/index.js',
       interpreter: 'node',
       env: {
