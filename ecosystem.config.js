@@ -2,7 +2,7 @@ module.exports = {
   apps: [
     {
       name: 'ingestion',
-      script: 'dist/index.js',
+      script: 'dist/src/index.js',
       interpreter: 'node',
       env: {
         NODE_ENV: 'production',
