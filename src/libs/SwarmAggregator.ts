@@ -1,9 +1,9 @@
 import { Bee, Bytes, EthAddress, FeedIndex, Identifier, PrivateKey, Topic } from '@ethersphere/bee-js';
+import PQueue from 'p-queue';
 
-import { ChainEmitter } from './ChainEmitter';
-import { ErrorHandler } from './error';
-import { Logger } from './logger';
-import { Queue } from './queue';
+import { ChainEmitter } from './ChainEmitter.js';
+import { ErrorHandler } from './error.js';
+import { Logger } from './logger.js';
 
 const GSOC_BEE_URL = process.env.GSOC_BEE_URL!;
 const GSOC_RESOURCE_ID = process.env.GSOC_RESOURCE_ID!;
@@ -17,12 +17,14 @@ const STREAM_STAMP = process.env.STREAM_STAMP!;
 export class SwarmAggregator {
   private gsocBee: Bee;
   private writerBee: Bee;
-  private index: FeedIndex | null;
   private streamSigner: PrivateKey;
   private chainEmitter: ChainEmitter;
+  private index: FeedIndex | null = null;
   private logger = Logger.getInstance();
   private errorHandler = new ErrorHandler();
-  private queue = new Queue();
+  private queue = new PQueue({
+    concurrency: 1,
+  });
 
   private messageCache = new Map<string, null>();
   private readonly maxCacheSize = 50_000;
@@ -64,7 +66,7 @@ export class SwarmAggregator {
     const identifier = Identifier.fromString(GSOC_TOPIC);
 
     const gsocSub = this.gsocBee.gsocSubscribe(key.publicKey().address(), identifier, {
-      onMessage: (message: Bytes) => this.queue.enqueue(() => this.gsocCallback(message)),
+      onMessage: (message: Bytes) => this.queue.add(() => this.gsocCallback(message)),
       onError: this.logger.error.bind(this.logger),
     });
 

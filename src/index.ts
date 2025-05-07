@@ -2,9 +2,9 @@ import { GsocSubscription } from '@ethersphere/bee-js';
 
 import 'dotenv/config';
 
-import { ErrorHandler } from './libs/error';
-import { Logger } from './libs/logger';
-import { SwarmAggregator } from './libs/SwarmAggregator';
+import { ErrorHandler } from './libs/error.js';
+import { Logger } from './libs/logger.js';
+import { SwarmAggregator } from './libs/SwarmAggregator.js';
 
 async function main() {
   const aggregator = new SwarmAggregator();
@@ -29,11 +29,11 @@ async function main() {
     process.exit(0);
   });
 
-  process.on('uncaughtException', (err) => {
+  process.on('uncaughtException', err => {
     errorHandler.handleError(err, 'UncaughtException');
   });
 
-  process.on('unhandledRejection', (reason) => {
+  process.on('unhandledRejection', reason => {
     errorHandler.handleError(reason, 'UnhandledRejection');
   });
 }
