@@ -2,9 +2,7 @@ import { AnchorProvider, Program, Provider, Wallet } from '@coral-xyz/anchor';
 import { Connection, Keypair, PublicKey } from '@solana/web3.js';
 import { ethers, JsonRpcProvider, WebSocketProvider } from 'ethers';
 
-const { default: svmIdl } = await import('../../IDL/SwarmEventEmitter.json', {
-  assert: { type: 'json' },
-});
+import svmIdl from '../../IDL/SwarmEventEmitter.json' with { type: "json" };
 import { SwarmEventEmitter, SwarmEventEmitter__factory } from '../types/index.js';
 
 import { ErrorHandler } from './error.js';
@@ -48,13 +46,13 @@ export class ChainEmitter {
       ? new ethers.WebSocketProvider(RPC_URL)
       : new ethers.JsonRpcProvider(RPC_URL);
 
-    const privateKeys = JSON.parse(EVM_PRIVATE_KEYS);
+    const privateKeys = EVM_PRIVATE_KEYS.split(',');
     this.evmSigners = privateKeys.map((key: string) => new ethers.Wallet(key, this.evmProvider));
     this.evmContract = SwarmEventEmitter__factory.connect(CONTRACT_ADDRESS, this.evmProvider);
   }
 
   private initSvm() {
-    this.svmKeypair = Keypair.fromSecretKey(Uint8Array.from(SVM_PRIVATE_KEY));
+    this.svmKeypair = Keypair.fromSecretKey(Uint8Array.from(JSON.parse(SVM_PRIVATE_KEY)));
 
     const connection = new Connection(RPC_URL, 'confirmed');
     const wallet = new Wallet(this.svmKeypair);
@@ -81,7 +79,7 @@ export class ChainEmitter {
         if (attempt < retries) {
           const backoff = delay * attempt;
           this.logger.info(`Retrying in ${backoff}ms...`);
-          await new Promise(res => setTimeout(res, backoff));
+          await new Promise((res) => setTimeout(res, backoff));
         } else {
           this.logger.error('All retry attempts failed.');
         }
