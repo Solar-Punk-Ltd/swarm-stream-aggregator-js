@@ -1,7 +1,6 @@
 import { Bee, Bytes, EthAddress, FeedIndex, Identifier, PrivateKey, Topic } from '@ethersphere/bee-js';
 import PQueue from 'p-queue';
 
-import { ChainEmitter } from './ChainEmitter.js';
 import { ErrorHandler } from './error.js';
 import { Logger } from './logger.js';
 
@@ -18,7 +17,6 @@ export class SwarmAggregator {
   private gsocBee: Bee;
   private writerBee: Bee;
   private streamSigner: PrivateKey;
-  private chainEmitter: ChainEmitter;
   private index: FeedIndex | null = null;
   private logger = Logger.getInstance();
   private errorHandler = new ErrorHandler();
@@ -31,7 +29,6 @@ export class SwarmAggregator {
   private readonly minCacheSize = 1_000;
 
   constructor() {
-    this.chainEmitter = new ChainEmitter();
     this.gsocBee = new Bee(GSOC_BEE_URL);
     this.writerBee = new Bee(STREAM_BEE_URL);
     this.streamSigner = new PrivateKey(STREAM_KEY);
@@ -106,7 +103,6 @@ export class SwarmAggregator {
 
     this.logger.info(`gsocCallback feed write result: ${res.reference}`);
 
-    await this.chainEmitter.emitEventWithRetry(`${STREAM_TOPIC}_${nextIndex.toString()}`);
     this.index = nextIndex;
   }
 
