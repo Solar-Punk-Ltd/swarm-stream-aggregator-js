@@ -86,5 +86,5 @@ enhancements:
 
 - [What are Feeds? (Official Swarm Documentation)](https://docs.ethswarm.org/docs/develop/tools-and-features/feeds#what-are-feeds)
 - [GSOC Introduction (Official Swarm Documentation)](https://docs.ethswarm.org/docs/develop/tools-and-features/gsoc/#introduction)
-- [Solar-Punk-Ltd/mssd-ingestion Library](https://github.com/Solar-Punk-Ltd/mssd-ingestion)
+- [Solar-Punk-Ltd/mssd-ingestion](https://github.com/Solar-Punk-Ltd/mssd-ingestion)
 - [Example Stream Client: Solar-Punk-Ltd/swarm-ingestion-stream-react-example](https://github.com/Solar-Punk-Ltd/swarm-ingestion-stream-react-example)
