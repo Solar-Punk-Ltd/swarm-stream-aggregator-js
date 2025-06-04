@@ -1,4 +1,4 @@
-# Example swarm stream GSOC Aggregator Server 🐝💬
+# Example swarm stream GSOC Aggregator Server 🐝
 
 This project provides an example implementation of a GSOC aggregator server designed to work with
 [Solar-Punk-Ltd/mssd-ingestion](https://github.com/Solar-Punk-Ltd/mssd-ingestion).
