@@ -44,6 +44,8 @@ The server requires the following environment variables to be set:
 
 ## 🚀 Running the Aggregator
 
+### Option 1: Node.js (Direct)
+
 1.  **Clone the repository:**
     ```bash
     git clone git@github.com:Solar-Punk-Ltd/swarm-stream-aggregator-js.git
@@ -57,11 +59,36 @@ The server requires the following environment variables to be set:
     above, or set them in your deployment environment.
 4.  **Build the server:**
     ```bash
-    pnpm/npm build
+    pnpm build
     ```
 5.  **Start the server:**
     ```bash
-    npm start
+    pnpm start
+    ```
+
+### Option 2: Docker
+
+1.  **Clone the repository:**
+
+    ```bash
+    git clone git@github.com:Solar-Punk-Ltd/swarm-stream-aggregator-js.git
+    cd swarm-stream-aggregator-js
+    ```
+
+2.  **Set up your environment variables:** Create a `.env` file in the root of the project with the required variables.
+
+3.  **Build and run with Docker:**
+
+    ```bash
+    # Build the Docker image
+    docker build -t swarm-stream-aggregator .
+
+    # Run the container
+    docker run -d \
+      --name swarm-stream-aggregator \
+      --env-file .env \
+      --restart unless-stopped \
+      swarm-stream-aggregator
     ```
 
 ---
