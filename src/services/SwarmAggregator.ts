@@ -1,8 +1,13 @@
-import { Bee, Bytes, EthAddress, FeedIndex, Identifier, PrivateKey, Topic } from '@ethersphere/bee-js';
+import { Bee, Bytes, FeedIndex, Identifier, PrivateKey, Topic } from '@ethersphere/bee-js';
 import PQueue from 'p-queue';
 
-import { ErrorHandler } from './error.js';
-import { Logger } from './logger.js';
+import { ErrorHandler } from '../libs/error.js';
+import { Logger } from '../libs/logger.js';
+import { StateEntry } from '../types.js';
+
+import { AuthService } from './AuthService.js';
+import { MessageProcessor } from './MessageProcessor.js';
+import { StateManager } from './StateManager.js';
 
 const GSOC_BEE_URL = process.env.GSOC_BEE_URL!;
 const GSOC_RESOURCE_ID = process.env.GSOC_RESOURCE_ID!;
@@ -12,6 +17,9 @@ const STREAM_BEE_URL = process.env.STREAM_BEE_URL!;
 const STREAM_TOPIC = process.env.STREAM_TOPIC!;
 const STREAM_KEY = process.env.STREAM_KEY!;
 const STREAM_STAMP = process.env.STREAM_STAMP!;
+
+const AUTH_KEYS = process.env.AUTH_KEYS?.split(',') || [];
+const REQUIRE_AUTH = process.env.REQUIRE_AUTH === 'true';
 
 export class SwarmAggregator {
   private gsocBee: Bee;
@@ -24,6 +32,11 @@ export class SwarmAggregator {
     concurrency: 1,
   });
 
+  private authService: AuthService;
+  private stateManager: StateManager;
+  private messageProcessor: MessageProcessor;
+
+  // Message deduplication cache
   private messageCache = new Map<string, null>();
   private readonly maxCacheSize = 50_000;
   private readonly minCacheSize = 1_000;
@@ -32,6 +45,15 @@ export class SwarmAggregator {
     this.gsocBee = new Bee(GSOC_BEE_URL);
     this.writerBee = new Bee(STREAM_BEE_URL);
     this.streamSigner = new PrivateKey(STREAM_KEY);
+
+    const config = {
+      keys: AUTH_KEYS,
+      requireAuth: REQUIRE_AUTH,
+    };
+
+    this.authService = new AuthService(config);
+    this.stateManager = new StateManager();
+    this.messageProcessor = new MessageProcessor(this.authService, this.stateManager);
   }
 
   public async init() {
@@ -41,6 +63,8 @@ export class SwarmAggregator {
 
       this.logger.info('init topic:', topic.toHex());
       this.logger.info('init owner:', publicKey.toHex());
+      this.logger.info(`init auth enabled: ${REQUIRE_AUTH}`);
+      this.logger.info(`init auth keys configured: ${AUTH_KEYS.length}`);
 
       const feedReader = this.writerBee.makeFeedReader(topic, publicKey);
 
@@ -51,13 +75,13 @@ export class SwarmAggregator {
     } catch (error) {
       if (error instanceof Error && error.message.includes('404')) {
         this.index = null;
+        this.logger.info('init: No existing feed found, starting fresh');
       } else {
         this.errorHandler.handleError(error, 'SwarmAggregator.init');
       }
     }
   }
 
-  //TODO: improve idea, process requests in a batch?
   public subscribeToGsoc() {
     const key = new PrivateKey(GSOC_RESOURCE_ID);
     const identifier = Identifier.fromString(GSOC_TOPIC);
@@ -72,66 +96,66 @@ export class SwarmAggregator {
     return gsocSub;
   }
 
-  // TODO: validation!
   private async gsocCallback(message: Bytes) {
-    if (!this.shouldProcessMessage(message)) {
-      this.logger.debug('Duplicate message dropped.');
-      return;
+    try {
+      if (!this.shouldProcessMessage(message)) {
+        this.logger.debug('Duplicate message dropped.');
+        return;
+      }
+
+      const previousState = await this.fetchPreviousState();
+
+      // Process message through the new modular system
+      const result = await this.messageProcessor.processMessage(message, previousState || []);
+
+      if (!result.success) {
+        this.logger.error(`Failed to process message: ${result.error}`);
+        return;
+      }
+
+      if (result.state) {
+        await this.writeStateToFeed(result.state);
+      }
+    } catch (error) {
+      this.errorHandler.handleError(error, 'SwarmAggregator.gsocCallback');
+    }
+  }
+
+  private async fetchPreviousState(): Promise<StateEntry[] | null> {
+    if (this.index === null) {
+      return null;
     }
 
     const topic = Topic.fromString(STREAM_TOPIC);
-
-    const newJsonData = JSON.parse(message.toUtf8());
-    this.logger.info(`gsocCallback message: ${JSON.stringify(newJsonData)}`);
-
-    let newState = [newJsonData];
-    if (this.index !== null) {
-      const previousState = await this.fetchPreviousState(this.streamSigner.publicKey().address(), topic, this.index);
-      if (previousState) {
-        newState = this.mergeState(previousState.payload, newJsonData);
-      }
-    }
-
-    this.logger.info(`gsocCallback new state written`);
-
-    const feedWriter = this.writerBee.makeFeedWriter(topic, this.streamSigner);
-    const nextIndex = this.index ? this.index.next() : FeedIndex.fromBigInt(BigInt(0));
-
-    const res = await feedWriter.uploadPayload(STREAM_STAMP, JSON.stringify(newState), {
-      index: nextIndex,
-    });
-
-    this.logger.info(`gsocCallback feed write result: ${res.reference}`);
-
-    this.index = nextIndex;
-  }
-
-  // TODO: generalize this function based on a state convention, any
-  private mergeState(previousState: Bytes, newData: any) {
-    const jsonPreviousState = previousState.toJSON() as any[];
-
-    const filteredState = jsonPreviousState.filter(
-      entry => entry.owner !== newData.owner || entry.topic !== newData.topic,
-    );
-
-    filteredState.push(newData);
-
-    return filteredState;
-  }
-
-  private async fetchPreviousState(owner: EthAddress, topic: Topic, index: FeedIndex) {
-    const feedReader = this.gsocBee.makeFeedReader(topic, owner);
+    const owner = this.streamSigner.publicKey().address();
+    const feedReader = this.writerBee.makeFeedReader(topic, owner);
 
     try {
       const data = await feedReader.downloadPayload({
-        index,
+        index: this.index,
       });
+
       this.logger.info(`Fetched previous state: ${data.feedIndex.toString()}`);
-      return data;
+
+      const jsonState = data.payload.toJSON() as StateEntry[];
+      return jsonState;
     } catch (error) {
       this.errorHandler.handleError(error, 'SwarmAggregator.fetchPreviousState');
       return null;
     }
+  }
+
+  private async writeStateToFeed(state: StateEntry[]): Promise<void> {
+    const topic = Topic.fromString(STREAM_TOPIC);
+    const feedWriter = this.writerBee.makeFeedWriter(topic, this.streamSigner);
+    const nextIndex = this.index ? this.index.next() : FeedIndex.fromBigInt(BigInt(0));
+
+    const res = await feedWriter.uploadPayload(STREAM_STAMP, JSON.stringify(state), {
+      index: nextIndex,
+    });
+
+    this.logger.info(`Feed write result: ${res.reference}, Index: ${nextIndex.toString()}`);
+    this.index = nextIndex;
   }
 
   private shouldProcessMessage(message: Bytes): boolean {
