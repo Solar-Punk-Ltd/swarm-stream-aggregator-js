@@ -47,7 +47,7 @@ export class SwarmAggregator {
     this.streamSigner = new PrivateKey(STREAM_KEY);
 
     const config = {
-      keys: AUTH_KEYS,
+      publicKeys: AUTH_KEYS,
       requireAuth: REQUIRE_AUTH,
     };
 

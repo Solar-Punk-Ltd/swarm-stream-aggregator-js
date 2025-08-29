@@ -6,7 +6,6 @@ export class StateManager {
   private readonly maxStateSize = 5;
 
   public createEntry(state: StateEntry[], newEntry: StateEntry): StateEntry[] {
-    // Check for duplicates
     const duplicate = state.find(entry => entry.owner === newEntry.owner && entry.topic === newEntry.topic);
 
     if (duplicate) {
@@ -61,29 +60,13 @@ export class StateManager {
     return state.find(entry => entry.owner === owner && entry.topic === topic);
   }
 
-  public mergeStates(oldState: StateEntry[], newState: StateEntry[]): StateEntry[] {
-    const merged = new Map<string, StateEntry>();
-
-    oldState.forEach(entry => {
-      const key = `${entry.owner}:${entry.topic}`;
-      merged.set(key, entry);
-    });
-
-    newState.forEach(entry => {
-      const key = `${entry.owner}:${entry.topic}`;
-      merged.set(key, entry);
-    });
-
-    return Array.from(merged.values());
-  }
-
   public validateEntry(entry: StateEntry): boolean {
     if (!entry.owner || !entry.topic) {
       this.logger.error('Invalid entry: missing required fields (id or owner/topic)');
       return false;
     }
 
-    // Add more validation rules as needed
+    //TODO: Add more validation rules
     return true;
   }
 }

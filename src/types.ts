@@ -48,7 +48,7 @@ export interface ProcessResult {
 
 export interface AuthConfig {
   requireAuth: boolean;
-  publicKeys?: string[];
+  publicKeys: string[];
 }
 
 export interface HandlerContext {
