@@ -1,17 +1,16 @@
-import * as crypto from 'crypto';
+import { Signature } from '@ethersphere/bee-js';
 
 import { Logger } from '../libs/logger.js';
 import { AuthConfig, Message } from '../types.js';
 
-// TODO: adjust to curr arch
 export class AuthService {
   private logger = Logger.getInstance();
-  private validKeys: Set<string>;
+  private validPublicKeys: Set<string>;
   private requireAuth: boolean;
 
   constructor(config: AuthConfig) {
     this.requireAuth = config.requireAuth;
-    this.validKeys = new Set(config.keys.map(key => this.hashKey(key)));
+    this.validPublicKeys = new Set(config.publicKeys || []);
   }
 
   public validateMessage(message: Message): boolean {
@@ -20,24 +19,42 @@ export class AuthService {
       return true;
     }
 
-    // All non-legacy messages require auth
-    if (!message.key) {
-      this.logger.warn('Message rejected: missing authentication key');
+    if (!message.signature || !message.publicKey) {
+      this.logger.warn('Message rejected: missing signature or public key');
       return false;
     }
 
-    const hashedKey = this.hashKey(message.key);
-
-    if (!this.validKeys.has(hashedKey)) {
-      this.logger.warn('Message rejected: invalid authentication key');
+    if (this.validPublicKeys.size > 0 && !this.validPublicKeys.has(message.publicKey)) {
+      this.logger.warn('Message rejected: unauthorized public key');
       return false;
     }
 
-    this.logger.debug('Message authenticated successfully');
-    return true;
+    try {
+      const isValid = this.verifySignature(message, message.signature, message.publicKey);
+
+      if (!isValid) {
+        this.logger.warn('Message rejected: invalid signature');
+        return false;
+      }
+
+      this.logger.debug('Message authenticated successfully', {
+        publicKey: message.publicKey.substring(0, 10) + '...',
+      });
+
+      return true;
+    } catch (error) {
+      this.logger.error('Signature verification failed:', error);
+      return false;
+    }
   }
 
-  private hashKey(key: string): string {
-    return crypto.createHash('sha256').update(key).digest('hex');
+  private verifySignature(message: Message, signature: string, publicKey: string): boolean {
+    try {
+      const sig = new Signature(signature);
+      return sig.isValid(JSON.stringify(message), publicKey);
+    } catch (error) {
+      this.logger.error('Error verifying signature:', error);
+      return false;
+    }
   }
 }

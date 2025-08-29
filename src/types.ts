@@ -6,7 +6,8 @@ export enum ActionType {
 
 export interface BaseMessage {
   action: ActionType;
-  key: string;
+  signature: string;
+  publicKey: string;
 }
 
 export interface CreateMessage extends BaseMessage {
@@ -46,8 +47,8 @@ export interface ProcessResult {
 }
 
 export interface AuthConfig {
-  keys: string[];
   requireAuth: boolean;
+  publicKeys?: string[];
 }
 
 export interface HandlerContext {
