@@ -51,7 +51,7 @@ export class AuthService {
   private verifySignature(message: Message, signature: string, publicKey: string): boolean {
     try {
       const sig = new Signature(signature);
-      return sig.isValid(JSON.stringify(message), publicKey);
+      return sig.isValid(message.nonce, publicKey);
     } catch (error) {
       this.logger.error('Error verifying signature:', error);
       return false;

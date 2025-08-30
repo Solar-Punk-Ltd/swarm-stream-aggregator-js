@@ -105,7 +105,6 @@ export class SwarmAggregator {
 
       const previousState = await this.fetchPreviousState();
 
-      // Process message through the new modular system
       const result = await this.messageProcessor.processMessage(message, previousState || []);
 
       if (!result.success) {

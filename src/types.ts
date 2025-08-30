@@ -4,10 +4,22 @@ export enum ActionType {
   DELETE = 'delete',
 }
 
+export enum MediaType {
+  VIDEO = 'video',
+  AUDIO = 'audio',
+}
+
+export enum StateType {
+  LIVE = 'live',
+  VOD = 'vod',
+  SCHEDULED = 'scheduled',
+}
+
 export interface BaseMessage {
   action: ActionType;
   signature: string;
   publicKey: string;
+  nonce: string;
 }
 
 export interface CreateMessage extends BaseMessage {
@@ -31,13 +43,15 @@ export interface StateEntry {
   owner: string;
   topic: string;
   title: string;
-  state: string;
-  index: number;
-  duration: number;
-  mediaType: string;
-  thumbnail?: string;
+  state: StateType;
+  mediaType: MediaType;
   createdAt?: number;
   updatedAt?: number;
+  index?: number;
+  duration?: number;
+  thumbnail?: string;
+  description?: string;
+  scheduledStartTime?: string;
 }
 
 export interface ProcessResult {
