@@ -47,7 +47,7 @@ export class StateManager {
   }
 
   public deleteEntry(state: StateEntry[], owner: string, topic: string): StateEntry[] {
-    const filtered = state.filter(entry => entry.owner === owner && entry.topic === topic);
+    const filtered = state.filter(entry => !(entry.owner === owner && entry.topic === topic));
 
     if (filtered.length === state.length) {
       throw new Error(`Entry not found with id: ${`${owner}:${topic}`}`);

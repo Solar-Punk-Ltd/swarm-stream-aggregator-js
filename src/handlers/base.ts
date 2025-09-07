@@ -1,6 +1,8 @@
 import { Logger } from '../libs/logger.js';
 import { StateManager } from '../services/StateManager.js';
-import { HandlerContext, ProcessResult, StateEntry } from '../types.js';
+import { StateEntry } from '../types.js';
+
+import { HandlerContext, ProcessResult } from './types.js';
 
 export abstract class BaseHandler {
   protected logger = Logger.getInstance();

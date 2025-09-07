@@ -18,7 +18,7 @@ const STREAM_TOPIC = process.env.STREAM_TOPIC!;
 const STREAM_KEY = process.env.STREAM_KEY!;
 const STREAM_STAMP = process.env.STREAM_STAMP!;
 
-const AUTH_KEYS = process.env.AUTH_KEYS?.split(',') || [];
+const API_KEY = process.env.API_KEY!;
 const REQUIRE_AUTH = process.env.REQUIRE_AUTH === 'true';
 
 export class SwarmAggregator {
@@ -47,7 +47,7 @@ export class SwarmAggregator {
     this.streamSigner = new PrivateKey(STREAM_KEY);
 
     const config = {
-      publicKeys: AUTH_KEYS,
+      apiKey: API_KEY,
       requireAuth: REQUIRE_AUTH,
     };
 
@@ -64,7 +64,6 @@ export class SwarmAggregator {
       this.logger.info('init topic:', topic.toHex());
       this.logger.info('init owner:', publicKey.toHex());
       this.logger.info(`init auth enabled: ${REQUIRE_AUTH}`);
-      this.logger.info(`init auth keys configured: ${AUTH_KEYS.length}`);
 
       const feedReader = this.writerBee.makeFeedReader(topic, publicKey);
 

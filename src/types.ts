@@ -15,24 +15,17 @@ export enum StateType {
   SCHEDULED = 'scheduled',
 }
 
-export interface BaseMessage {
-  action: ActionType;
-  signature: string;
-  publicKey: string;
-  nonce: string;
-}
-
-export interface CreateMessage extends BaseMessage {
+export interface CreateMessage {
   action: ActionType.CREATE;
   data: StateEntry;
 }
 
-export interface UpdateMessage extends BaseMessage {
+export interface UpdateMessage {
   action: ActionType.UPDATE;
   data: Partial<StateEntry>;
 }
 
-export interface DeleteMessage extends BaseMessage {
+export interface DeleteMessage {
   action: ActionType.DELETE;
   data: Partial<StateEntry>;
 }
@@ -52,21 +45,4 @@ export interface StateEntry {
   thumbnail?: string;
   description?: string;
   scheduledStartTime?: string;
-}
-
-export interface ProcessResult {
-  success: boolean;
-  state?: StateEntry[];
-  error?: string;
-}
-
-export interface AuthConfig {
-  requireAuth: boolean;
-  publicKeys: string[];
-}
-
-export interface HandlerContext {
-  previousState: StateEntry[];
-  message: Message;
-  logger: any;
 }

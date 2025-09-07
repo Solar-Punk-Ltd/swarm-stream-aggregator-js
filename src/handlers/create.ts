@@ -1,6 +1,7 @@
-import { CreateMessage, HandlerContext, ProcessResult, StateEntry } from '../types.js';
+import { CreateMessage, StateEntry } from '../types.js';
 
 import { BaseHandler } from './base.js';
+import { HandlerContext, ProcessResult } from './types.js';
 
 export class CreateHandler extends BaseHandler {
   protected async validate(context: HandlerContext): Promise<ProcessResult> {
