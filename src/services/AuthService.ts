@@ -1,4 +1,7 @@
+import bs58 from 'bs58';
 import * as crypto from 'crypto';
+import messagepack from 'msgpack-lite';
+import * as zlib from 'zlib';
 
 import { Logger } from '../libs/logger.js';
 import { Message } from '../types.js';
@@ -14,33 +17,29 @@ interface EncryptedData {
   authTag: string;
 }
 
-interface TokenData {
-  instanceId: string;
-  encryptedPayload: EncryptedData;
-  createdAt: number;
-  expiresAt: number;
-  signature: string;
+interface TokenObject {
+  s: string; // signature
+  i: string; // instanceId
+  p: EncryptedData;
+  c: number; // createdAt
+  e: number; // expiresAt
 }
 
-interface UserCredentials {
+export interface UserCredentials {
   userId: string;
   userSecret: string;
   instanceId: string;
 }
 
 interface DecryptedPayload {
-  credentials: UserCredentials;
-  data: string;
-  signatureData: {
-    instanceId: string;
-    createdAt: number;
-    expiresAt: number;
-  };
+  u: string; // userId
+  s: string; // userSecret
+  message: Message;
 }
 
-interface VerifiedToken {
+export interface VerifiedToken {
   credentials: UserCredentials;
-  data: Message;
+  message: Message;
   instanceId: string;
   createdAt: number;
   expiresAt: number;
@@ -72,7 +71,7 @@ export class AuthService {
 
       return {
         isValid: true,
-        message: verifiedToken.data,
+        message: verifiedToken.message,
       };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -82,63 +81,63 @@ export class AuthService {
   }
 
   public verifyAndDecrypt(token: string): VerifiedToken {
-    const tokenData: TokenData = JSON.parse(Buffer.from(token, 'base64').toString());
+    const tokenBuffer = bs58.decode(token);
+    const tokenObject: TokenObject = messagepack.decode(tokenBuffer);
 
-    if (tokenData.expiresAt < Date.now()) {
+    if (tokenObject.e < Date.now()) {
       throw new Error('Token expired');
     }
 
-    const decryptedPayload = this.decryptPayload(tokenData.encryptedPayload, this.apiKey);
+    const decryptedPayload = this.decryptPayload(tokenObject.p, this.apiKey);
+    const userSecret = decryptedPayload.s;
 
-    if (!this.verifySignature(tokenData, decryptedPayload.credentials.userSecret)) {
+    if (!this.verifySignature(tokenObject, userSecret)) {
       throw new Error('Invalid signature');
     }
 
-    if (
-      decryptedPayload.signatureData.instanceId !== tokenData.instanceId ||
-      decryptedPayload.signatureData.createdAt !== tokenData.createdAt ||
-      decryptedPayload.signatureData.expiresAt !== tokenData.expiresAt
-    ) {
-      throw new Error('Token metadata mismatch');
-    }
-
     return {
-      credentials: decryptedPayload.credentials,
-      data: JSON.parse(decryptedPayload.data) as Message,
-      instanceId: tokenData.instanceId,
-      createdAt: tokenData.createdAt,
-      expiresAt: tokenData.expiresAt,
+      credentials: {
+        userId: decryptedPayload.u,
+        userSecret: decryptedPayload.s,
+        instanceId: tokenObject.i,
+      },
+      message: decryptedPayload.message,
+      instanceId: tokenObject.i,
+      createdAt: tokenObject.c,
+      expiresAt: tokenObject.e,
     };
   }
 
-  private verifySignature(tokenData: TokenData, userSecret: string): boolean {
-    const signature = tokenData.signature;
+  private verifySignature(tokenObject: TokenObject, userSecret: string): boolean {
+    const signature = tokenObject.s;
 
     const dataToSign = {
-      instanceId: tokenData.instanceId,
-      encryptedPayload: tokenData.encryptedPayload,
-      createdAt: tokenData.createdAt,
-      expiresAt: tokenData.expiresAt,
+      i: tokenObject.i,
+      p: tokenObject.p,
+      c: tokenObject.c,
+      e: tokenObject.e,
     };
 
-    const expectedSignature = crypto.createHmac('sha256', userSecret).update(JSON.stringify(dataToSign)).digest('hex');
+    const signatureBuffer = messagepack.encode(dataToSign);
+
+    const expectedSignature = crypto.createHmac('sha256', userSecret).update(signatureBuffer).digest('hex');
 
     return signature === expectedSignature;
   }
 
   private decryptPayload(encryptedData: EncryptedData, apiKey: string): DecryptedPayload {
-    const algorithm = 'aes-256-gcm';
     const key = crypto.createHash('sha256').update(apiKey).digest();
-
     const iv = Buffer.from(encryptedData.iv, 'base64');
     const authTag = Buffer.from(encryptedData.authTag, 'base64');
     const encrypted = Buffer.from(encryptedData.encrypted, 'base64');
 
-    const decipher = crypto.createDecipheriv(algorithm, key, iv);
+    const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
     decipher.setAuthTag(authTag);
 
-    const decrypted = Buffer.concat([decipher.update(encrypted), decipher.final()]);
+    const decryptedBuffer = Buffer.concat([decipher.update(encrypted), decipher.final()]);
 
-    return JSON.parse(decrypted.toString('utf8')) as DecryptedPayload;
+    const decompressedBuffer = zlib.inflateSync(decryptedBuffer);
+
+    return messagepack.decode(decompressedBuffer) as DecryptedPayload;
   }
 }
