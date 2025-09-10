@@ -30,12 +30,15 @@
   },
   "dependencies": {
     "@ethersphere/bee-js": "^9.0.3",
+    "bs58": "^6.0.0",
     "dotenv": "^16.4.7",
+    "msgpack-lite": "^0.1.26",
     "p-queue": "^8.1.0"
   },
   "devDependencies": {
     "@commitlint/cli": "^19.8.0",
     "@commitlint/config-conventional": "^19.8.0",
+    "@types/msgpack-lite": "^0.1.11",
     "@types/node": "^22.7.5",
     "@typescript-eslint/eslint-plugin": "^6.14.0",
     "@typescript-eslint/parser": "^6.14.0",

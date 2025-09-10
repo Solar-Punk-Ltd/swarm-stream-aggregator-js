@@ -1,117 +1,247 @@
-# Example swarm stream GSOC Aggregator Server 🐝
+# Swarm Stream GSOC Aggregator Server 🐝
 
-This project provides an example implementation of a GSOC aggregator server designed to work with
-[Solar-Punk-Ltd/mssd-ingestion](https://github.com/Solar-Punk-Ltd/mssd-ingestion).
+A token-authenticated GSOC aggregator server that processes stream management messages and maintains a consolidated
+state feed on Swarm. This server works in conjunction with
+[Solar-Punk-Ltd/msrs-ingestion](https://github.com/Solar-Punk-Ltd/msrs-ingestion) to provide a complete streaming
+infrastructure.
 
-The primary function of this server is to receive messages sent by the ingestion server via GSOC and consolidate them
-into a more persistent, access-controlled Swarm feed (the "stream feed" or "app feed). This feed has information about
-the stream's that should be displayed at client side.
+## 📋 Overview
 
-**Note:** This is an example implementation. For production environments, consider enhancing aspects like, message
-validation, schema enforcement, and feed writing policies.
+The aggregator server acts as a central processor for stream management operations, receiving token-authenticated
+messages via GSOC and maintaining an authoritative stream state on a Swarm feed. It validates tokens, processes CRUD
+operations, and manages stream metadata in a decentralized manner.
 
----
+## ⚙️ Architecture
 
-## ⚙️ How It Works
+### Core Components
 
-The aggregator server operates through the following steps:
+1. **AuthService**: Token validation and decryption using AES-256-GCM
+2. **MessageProcessor**: Routes messages to appropriate handlers based on action type
+3. **StateManager**: Manages stream state with CRUD operations and validation
+4. **SwarmAggregator**: Main orchestrator handling GSOC subscription and feed writing
 
-1.  **GSOC Subscription:** The server connects to a specified Bee node (`GSOC_BEE_URL`) and subscribes to updates on a
-    particular GSOC resource (`GSOC_RESOURCE_ID`) and topic (`GSOC_TOPIC`).
-2.  **Message Reception:** As new messages arrive on the GSOC feed, the server receives them.
-3.  **Message Processing:** The server does a very basic validation and makes a simple aggregated list. The list of the
-    streams that should be displayed on the client.
-4.  **Stream Feed Writing:** Valid messages are then written to a separate, designated Swarm feed (the "stream feed" or
-    "app feed"). This feed is managed by a different Bee node (`SWARM_BEE_URL`) and secured with a private key
-    (`SWARM_KEY`), ensuring that only authorized entities (like this aggregator) can write to it. Writes to this feed
-    require a valid postage stamp (`SWARM_STAMP`).
+### Message Flow
 
----
+1. **Token Reception**: Encrypted tokens are received via GSOC subscription
+2. **Authentication**: Tokens are validated and decrypted to extract user credentials and message payload
+3. **Message Processing**: Messages are routed to action-specific handlers (Create/Update/Delete)
+4. **State Management**: Stream state is updated according to the action
+5. **Feed Writing**: Updated state is written to a Swarm feed for persistence
+
+## 🔐 Authentication System
+
+The server implements token-based authentication with the following features:
+
+- **Encrypted Payloads**: Messages are encrypted using AES-256-GCM
+- **HMAC Signatures**: Token integrity verified using HMAC-SHA256
+- **Expiration Checks**: Tokens have built-in expiration timestamps
+- **Optional Auth**: Authentication can be disabled for development via `REQUIRE_AUTH`
+
+### Token Structure
+
+Tokens contain:
+
+- User credentials (userId, userSecret)
+- Instance identifier
+- Encrypted message payload
+- Creation and expiration timestamps
+- HMAC signature for verification
+
+## 🎯 Supported Actions
+
+### CREATE
+
+Creates a new stream entry with metadata:
+
+- Title, description, thumbnail
+- Media type (video/audio)
+- Scheduled start time
+- Stream state
+
+### UPDATE
+
+Modifies existing stream metadata while preserving creation timestamp
+
+### DELETE
+
+Removes a stream from the state
 
 ## 🔧 Configuration
 
-The server requires the following environment variables to be set:
+### Environment Variables
 
-| Variable           | Description                                                                      |
-| :----------------- | :------------------------------------------------------------------------------- |
-| `GSOC_BEE_URL`     | The URL of the Bee node used for GSOC operations (subscribing to user messages). |
-| `GSOC_RESOURCE_ID` | The mined Swarm resource ID of the GSOC feed the aggregator listens to.          |
-| `GSOC_TOPIC`       | The specific topic hash on the GSOC feed that this aggregator monitors.          |
-| `SWARM_BEE_URL`    | The URL of the Bee node used for writing to the consolidated stream feed.        |
-| `SWARM_TOPIC`      | The human readable topic name of the stream feed.                                |
-| `SWARM_KEY`        | The private key used to sign updates to the consolidated stream feed.            |
-| `SWARM_STAMP`      | The postage stamp ID used for uploading content to the stream feed.              |
+| Variable           | Description                                    | Required |
+| :----------------- | :--------------------------------------------- | :------- |
+| `GSOC_BEE_URL`     | Bee node URL for GSOC subscription             | Yes      |
+| `GSOC_RESOURCE_ID` | Mined GSOC resource ID to monitor              | Yes      |
+| `GSOC_TOPIC`       | GSOC topic hash for subscription               | Yes      |
+| `STREAM_BEE_URL`   | Bee node URL for feed writing                  | Yes      |
+| `STREAM_TOPIC`     | Human-readable topic for stream feed           | Yes      |
+| `STREAM_KEY`       | Private key for signing feed updates           | Yes      |
+| `STREAM_STAMP`     | Postage stamp for Swarm uploads                | Yes      |
+| `API_KEY`          | Secret key for token decryption                | Yes      |
+| `REQUIRE_AUTH`     | Enable/disable authentication (`true`/`false`) | Yes      |
+
+### Example `.env` file
+
+```env
+# GSOC Configuration
+GSOC_BEE_URL=http://localhost:1633
+GSOC_RESOURCE_ID=0000000000000000000000000000000000000000000000000000000000000000
+GSOC_TOPIC=STREAM_UPDATES
+
+# Swarm Feed Configuration
+STREAM_BEE_URL=http://localhost:1633
+STREAM_TOPIC=stream-state
+STREAM_KEY=your-private-key-hex
+STREAM_STAMP=your-postage-stamp
+
+# Authentication
+REQUIRE_AUTH=true
+API_KEY=your-secret-api-key
+```
 
 ## 🚀 Running the Aggregator
 
-### Option 1: Node.js (Direct)
+### Option 1: Node.js
 
-1.  **Clone the repository:**
-    ```bash
-    git clone git@github.com:Solar-Punk-Ltd/swarm-stream-aggregator-js.git
-    cd swarm-stream-aggregator-js
-    ```
-2.  **Install dependencies:**
-    ```bash
-    pnpm install
-    ```
-3.  **Set up your environment variables:** Create a `.env` file in the root of the project with the variables listed
-    above, or set them in your deployment environment.
-4.  **Build the server:**
-    ```bash
-    pnpm build
-    ```
-5.  **Start the server:**
-    ```bash
-    pnpm start
-    ```
+```bash
+# Clone repository
+git clone git@github.com:Solar-Punk-Ltd/swarm-stream-aggregator-js.git
+cd swarm-stream-aggregator-js
+
+# Install dependencies
+pnpm install
+
+# Configure environment
+cp .env.example .env
+# Edit .env with your configuration
+
+# Build and start
+pnpm build
+pnpm start
+```
 
 ### Option 2: Docker
 
-1.  **Clone the repository:**
+```bash
+# Build Docker image
+docker build -t swarm-stream-aggregator .
 
-    ```bash
-    git clone git@github.com:Solar-Punk-Ltd/swarm-stream-aggregator-js.git
-    cd swarm-stream-aggregator-js
-    ```
+# Run container
+docker run -d \
+  --name swarm-stream-aggregator \
+  --env-file .env \
+  --restart unless-stopped \
+  swarm-stream-aggregator
+```
 
-2.  **Set up your environment variables:** Create a `.env` file in the root of the project with the required variables.
+## 📊 State Management
 
-3.  **Build and run with Docker:**
+### State Entry Structure
 
-    ```bash
-    # Build the Docker image
-    docker build -t swarm-stream-aggregator .
+```typescript
+interface StateEntry {
+  owner: string; // Stream owner address
+  topic: string; // Stream topic identifier
+  title: string; // Stream title
+  description: string; // Stream description
+  state: StateType; // SCHEDULED/LIVE/ENDED
+  mediaType: MediaType; // VIDEO/AUDIO
+  thumbnail?: string; // Swarm reference to thumbnail
+  scheduledStartTime?: string;
+  createdAt: number; // Unix timestamp
+  updatedAt: number; // Unix timestamp
+}
+```
 
-    # Run the container
-    docker run -d \
-      --name swarm-stream-aggregator \
-      --env-file .env \
-      --restart unless-stopped \
-      swarm-stream-aggregator
-    ```
+### State Constraints
 
----
+- **Maximum Entries**: Limited to 5 concurrent streams (configurable)
+- **Deduplication**: Prevents duplicate owner/topic combinations
+- **Automatic Timestamps**: Creation and update times managed automatically
+- **FIFO Eviction**: Oldest entry removed when limit exceeded
 
-## 💡 Limitations & Potential Improvements
+## 🔄 Message Processing Pipeline
 
-This example serves as a basic illustration. For a more robust, production-ready aggregator, consider the following
-enhancements:
+1. **Token Parsing**: Extract token from GSOC message bytes
+2. **Authentication**: Validate token signature and decrypt payload
+3. **Action Routing**: Route to appropriate handler based on action type
+4. **State Validation**: Validate entry data before state modification
+5. **State Update**: Apply changes to current state
+6. **Feed Persistence**: Write updated state to Swarm feed
 
-- **Advanced Validation:** Introduce stricter validation rules and schemas for incoming messages to ensure data
-  integrity and security.
-- **Flexible Feed Logic:** Explore different strategies for organizing stream feeds (e.g., separeate feeds for different
-  stream actions) depending on scale and requirements.
-- **Error Handling & Resilience:** Improve error handling, implement retry mechanisms for Swarm operations, and ensure
-  the aggregator can recover from transient network issues.
-- **Monitoring & Logging:** Integrate comprehensive logging and monitoring to track the aggregator's health and
-  performance.
+## 🛡️ Security Features
 
----
+- **Token Expiration**: Automatic rejection of expired tokens
+- **Message Deduplication**: Cache prevents processing duplicate messages
+- **Signature Verification**: HMAC validation ensures message integrity
+- **Encrypted Transport**: All message payloads are encrypted
+- **Private Feed Writing**: Only authorized aggregator can update feed
+
+## 📝 Logging
+
+Comprehensive logging includes:
+
+- Authentication success/failure
+- Message processing results
+- State changes
+- Feed write confirmations
+- Error conditions with stack traces
+
+## 🔗 Integration
+
+### With msrs-ingestion
+
+The aggregator processes stream state changes triggered by the ingestion server
+
+### With msrs-client
+
+The aggregator processes stream state changes triggered by a generated msrs-utils user
+
+### With Client Applications
+
+Clients read the consolidated feed to display available streams
+
+### Token Generation
+
+Tokens can be generated using:
+
+- [msrs-utils](https://github.com/Solar-Punk-Ltd/msrs-utils)
+- Client-side token generators
+- Custom implementations following the token specification
+
+## 💡 Development Tips
+
+### Running Without Authentication
+
+For development, set `REQUIRE_AUTH=false` to bypass token validation
+
+### Testing Token Generation
+
+Use the msrs-utils auth-manager to generate test tokens
+
+### Monitoring State
+
+Check the Swarm feed directly:
+
+```bash
+curl http://localhost:1633/feeds/<owner>/<topic>
+```
+
+## ⚠️ Production Considerations
+
+1. **Key Security**: Store private keys and API keys securely
+2. **Stamp Management**: Monitor postage stamp balance and TTL
+3. **Error Recovery**: Implement monitoring for failed message processing
+4. **State Backup**: Consider periodic state snapshots
+5. **Rate Limiting**: Add rate limiting for message processing if needed
+6. **Scaling**: Use message queue for high-volume scenarios
 
 ## 📚 Resources
 
-- [What are Feeds? (Official Swarm Documentation)](https://docs.ethswarm.org/docs/develop/tools-and-features/feeds#what-are-feeds)
-- [GSOC Introduction (Official Swarm Documentation)](https://docs.ethswarm.org/docs/develop/tools-and-features/gsoc/#introduction)
-- [Solar-Punk-Ltd/mssd-ingestion](https://github.com/Solar-Punk-Ltd/mssd-ingestion)
-- [Example Stream Client: Solar-Punk-Ltd/swarm-ingestion-stream-react-example](https://github.com/Solar-Punk-Ltd/swarm-ingestion-stream-react-example)
+- [Swarm Feeds Documentation](https://docs.ethswarm.org/docs/develop/tools-and-features/feeds)
+- [GSOC Documentation](https://docs.ethswarm.org/docs/develop/tools-and-features/gsoc)
+- [msrs-ingestion](https://github.com/Solar-Punk-Ltd/msrs-ingestion)
+- [msrs-utils](https://github.com/Solar-Punk-Ltd/msrs-utils)
+- [Example Client](https://github.com/Solar-Punk-Ltd/swarm-ingestion-stream-react-example)
