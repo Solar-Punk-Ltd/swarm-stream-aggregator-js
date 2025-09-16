@@ -1,4 +1,5 @@
 import { GsocSubscription } from '@ethersphere/bee-js';
+import * as http from 'http';
 
 import 'dotenv/config';
 
@@ -14,6 +15,21 @@ async function main() {
 
   logger.info('[SwarmAggregator] Starting');
 
+  const port = parseInt(process.env.PORT || '3000', 10);
+  const server = http.createServer((req, res) => {
+    if (req.url === '/health' && req.method === 'GET') {
+      res.writeHead(200, { 'Content-Type': 'text/plain' });
+      res.end('OK');
+    } else {
+      res.writeHead(404, { 'Content-Type': 'text/plain' });
+      res.end('Not Found');
+    }
+  });
+
+  server.listen(port, () => {
+    logger.info(`[HttpServer] Health check server listening on port ${port}`);
+  });
+
   try {
     await aggregator.init();
     gsocSubscription = aggregator.subscribeToGsoc();
@@ -26,6 +42,7 @@ async function main() {
   process.on('SIGINT', () => {
     logger.info('\n[SwarmAggregator] Shutting down...');
     gsocSubscription.cancel();
+    server.close();
     process.exit(0);
   });
 
