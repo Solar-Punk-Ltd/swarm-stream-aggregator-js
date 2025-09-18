@@ -6,6 +6,7 @@ import 'dotenv/config';
 import { ErrorHandler } from './libs/error.js';
 import { Logger } from './libs/logger.js';
 import { SwarmAggregator } from './services/SwarmAggregator.js';
+import { getEnvVariableWithDefault } from './common.js';
 
 async function main() {
   const aggregator = new SwarmAggregator();
@@ -15,7 +16,7 @@ async function main() {
 
   logger.info('[SwarmAggregator] Starting');
 
-  const port = parseInt(process.env.PORT || '3000', 10);
+  const port = parseInt(getEnvVariableWithDefault('PORT', '3000'), 10);
   const server = http.createServer((req, res) => {
     if (req.url === '/health' && req.method === 'GET') {
       res.writeHead(200, { 'Content-Type': 'text/plain' });
