@@ -34,6 +34,7 @@ export interface UserCredentials {
 interface DecryptedPayload {
   u: string; // userId
   s: string; // userSecret
+  n: string; // nginxSecret
   message: Message;
 }
 
