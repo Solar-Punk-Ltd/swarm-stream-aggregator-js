@@ -24,6 +24,6 @@ export class DeleteHandler extends BaseHandler {
 
     this.logger.info(`Deleting entry with id: ${message.data.owner}:${message.data.topic}`);
 
-    return this.stateManager.deleteEntry(context.previousState, message.data.owner!, message.data.topic!);
+    return await this.stateManager.deleteEntry(context.previousState, message.data.owner!, message.data.topic!);
   }
 }

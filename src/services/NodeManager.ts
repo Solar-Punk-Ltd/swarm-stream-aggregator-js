@@ -112,4 +112,49 @@ export class NodeManager {
       throw error;
     }
   }
+
+  public async unlockNode(port: string, force = false): Promise<void> {
+    try {
+      await this.axios.post('/admin/node/unlock', { port, force });
+      this.logger.info(`Unlocked node ${port}`);
+    } catch (error: any) {
+      if (error.response?.status === 423) {
+        throw new Error(`Node ${port} is pinned - use force to unlock`);
+      }
+      if (error.response?.status === 404) {
+        throw new Error(`Node ${port} is not locked`);
+      }
+      this.errorHandler.handleError(error, 'NodeManager.unlockNode');
+      throw error;
+    }
+  }
+
+  public async unlockStreamNodes(streamId: string, force = true): Promise<void> {
+    try {
+      const statusResponse = await this.axios.get('/admin/node/status');
+      const status = statusResponse.data as StatusResponse;
+
+      const streamNodes = status.nodes.private_writers.filter(node => node.lock_info?.stream_id === streamId);
+
+      if (streamNodes.length === 0) {
+        this.logger.info(`No nodes found for stream ${streamId} - nothing to unlock`);
+        return;
+      }
+
+      this.logger.info(`Unlocking ${streamNodes.length} nodes for stream ${streamId}`);
+
+      for (const node of streamNodes) {
+        try {
+          await this.unlockNode(node.port, force);
+          this.logger.info(`${force ? 'Force ' : ''}unlocked node ${node.port} for stream ${streamId}`);
+        } catch (error) {
+          this.logger.error(`Failed to unlock node ${node.port}:`, error);
+          // Continue with other nodes even if one fails
+        }
+      }
+    } catch (error) {
+      this.errorHandler.handleError(error, 'NodeManager.unlockStreamNodes');
+      throw error;
+    }
+  }
 }

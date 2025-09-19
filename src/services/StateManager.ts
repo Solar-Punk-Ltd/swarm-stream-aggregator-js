@@ -63,13 +63,24 @@ export class StateManager {
     return this.sortStateWithPinnedPriority(newState);
   }
 
-  public deleteEntry(state: StateEntry[], owner: string, topic: string): StateEntry[] {
-    const filtered = state.filter(entry => !(entry.owner === owner && entry.topic === topic));
+  public async deleteEntry(state: StateEntry[], owner: string, topic: string): Promise<StateEntry[]> {
+    const entryToDelete = state.find(entry => entry.owner === owner && entry.topic === topic);
 
-    if (filtered.length === state.length) {
+    if (!entryToDelete) {
       throw new Error(`Entry not found with id: ${`${owner}:${topic}`}`);
     }
 
+    const streamId = `${owner}/${topic}`;
+    this.logger.info(`Deleting entry ${streamId} - force unlocking associated nodes`);
+
+    try {
+      await this.unlockStreamNodes(streamId);
+    } catch (error) {
+      this.logger.error(`Failed to force unlock nodes for stream ${streamId}:`, error);
+      throw error;
+    }
+
+    const filtered = state.filter(entry => !(entry.owner === owner && entry.topic === topic));
     return filtered;
   }
 
@@ -113,5 +124,9 @@ export class StateManager {
     pinnedEntries.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
 
     return [...pinnedEntries, ...unpinnedEntries];
+  }
+
+  private async unlockStreamNodes(streamId: string): Promise<void> {
+    await this.nodeManager.unlockStreamNodes(streamId, true);
   }
 }
