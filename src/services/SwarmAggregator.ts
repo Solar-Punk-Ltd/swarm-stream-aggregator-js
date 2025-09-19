@@ -8,6 +8,7 @@ import { StateEntry } from '../types.js';
 
 import { AuthService } from './AuthService.js';
 import { MessageProcessor } from './MessageProcessor.js';
+import { NodeManager } from './NodeManager.js';
 import { StateManager } from './StateManager.js';
 
 const GSOC_BEE_URL = getEnvVariable('GSOC_BEE_URL');
@@ -23,13 +24,16 @@ const API_KEY = getEnvVariable('API_KEY');
 const REQUIRE_AUTH = getEnvVariable('REQUIRE_AUTH') === 'true';
 const NGINX_ADMIN_SECRET = getEnvVariable('NGINX_ADMIN_SECRET');
 
+// MSRS gateway specific settings
+const GATEWAY_URL = new URL(STREAM_BEE_URL).origin;
+
 export class SwarmAggregator {
   private gsocBee: Bee;
   private writerBee: Bee;
   private streamSigner: PrivateKey;
   private index: FeedIndex | null = null;
   private logger = Logger.getInstance();
-  private errorHandler = new ErrorHandler();
+  private errorHandler = ErrorHandler.getInstance();
   private queue = new PQueue({
     concurrency: 1,
   });
@@ -37,6 +41,7 @@ export class SwarmAggregator {
   private authService: AuthService;
   private stateManager: StateManager;
   private messageProcessor: MessageProcessor;
+  private nodeManager?: NodeManager;
 
   // Message deduplication cache
   private messageCache = new Map<string, null>();
@@ -58,7 +63,8 @@ export class SwarmAggregator {
     };
 
     this.authService = new AuthService(config);
-    this.stateManager = new StateManager();
+    this.nodeManager = new NodeManager(GATEWAY_URL, NGINX_ADMIN_SECRET);
+    this.stateManager = new StateManager(this.nodeManager);
     this.messageProcessor = new MessageProcessor(this.authService, this.stateManager);
   }
 

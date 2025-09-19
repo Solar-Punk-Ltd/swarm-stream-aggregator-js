@@ -24,6 +24,6 @@ export class UpdateHandler extends BaseHandler {
 
     this.logger.info(`Updating entry with id: ${message.data.owner}:${message.data.topic}`);
 
-    return this.stateManager.updateEntry(context.previousState, message.data);
+    return await this.stateManager.updateEntry(context.previousState, message.data);
   }
 }

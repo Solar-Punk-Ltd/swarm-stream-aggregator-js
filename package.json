@@ -30,6 +30,7 @@
   },
   "dependencies": {
     "@ethersphere/bee-js": "^9.0.3",
+    "axios": "^1.12.2",
     "bs58": "^6.0.0",
     "dotenv": "^16.4.7",
     "msgpack-lite": "^0.1.26",

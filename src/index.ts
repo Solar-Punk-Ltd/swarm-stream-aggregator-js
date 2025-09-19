@@ -10,7 +10,7 @@ import { getEnvVariableWithDefault } from './common.js';
 
 async function main() {
   const aggregator = new SwarmAggregator();
-  const errorHandler = new ErrorHandler();
+  const errorHandler = ErrorHandler.getInstance();
   const logger = Logger.getInstance();
   let gsocSubscription: GsocSubscription;
 
