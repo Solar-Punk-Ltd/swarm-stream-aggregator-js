@@ -25,10 +25,11 @@ export class StateManager {
     if (state.length >= this.maxStateSize) {
       this.logger.warn('State size limit reached (5 entries), removing oldest entry');
       const updatedState = this.removeOldestUnpinnedEntry(state);
-      return [...updatedState, entryWithTimestamps];
+
+      return this.sortStateWithPinnedPriority([...updatedState, entryWithTimestamps]);
     }
 
-    return [...state, entryWithTimestamps];
+    return this.sortStateWithPinnedPriority([...state, entryWithTimestamps]);
   }
 
   public async updateEntry(state: StateEntry[], updates: Partial<StateEntry>): Promise<StateEntry[]> {
@@ -122,6 +123,7 @@ export class StateManager {
     const unpinnedEntries = state.filter(entry => !entry.pinned);
 
     pinnedEntries.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+    unpinnedEntries.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
 
     return [...pinnedEntries, ...unpinnedEntries];
   }
