@@ -45,4 +45,5 @@ export interface StateEntry {
   thumbnail?: string;
   description?: string;
   scheduledStartTime?: string;
+  pinned?: boolean;
 }

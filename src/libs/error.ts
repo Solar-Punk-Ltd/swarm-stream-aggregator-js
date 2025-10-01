@@ -3,7 +3,16 @@ import { Logger } from './logger.js';
 export class ErrorHandler {
   private logger = Logger.getInstance();
 
-  constructor() {}
+  private static instance: ErrorHandler;
+
+  private constructor() {}
+
+  public static getInstance(): ErrorHandler {
+    if (!ErrorHandler.instance) {
+      ErrorHandler.instance = new ErrorHandler();
+    }
+    return ErrorHandler.instance;
+  }
 
   handleError(error: unknown, context?: string): void {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
