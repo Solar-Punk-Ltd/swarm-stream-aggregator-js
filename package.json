@@ -22,7 +22,8 @@
   "author": "levente.kiss@solarpunk.buzz",
   "scripts": {
     "prepare": "husky",
-    "build": "rimraf dist && tsc",
+    "build": "rimraf dist && tsc && npm run copy-proto",
+    "copy-proto": "mkdir -p dist/waku && cp src/waku/streamList.proto dist/waku/",
     "start": "node dist/index.js",
     "lint": "eslint . --ext .ts --report-unused-disable-directives --max-warnings 0",
     "lint:fix": "npm run lint -- --fix",
@@ -30,11 +31,13 @@
   },
   "dependencies": {
     "@ethersphere/bee-js": "^9.0.3",
+    "@waku/sdk": "^0.0.35",
     "axios": "^1.12.2",
     "bs58": "^6.0.0",
     "dotenv": "^16.4.7",
     "msgpack-lite": "^0.1.26",
-    "p-queue": "^8.1.0"
+    "p-queue": "^8.1.0",
+    "protobufjs": "^7.5.4"
   },
   "devDependencies": {
     "@commitlint/cli": "^19.8.0",

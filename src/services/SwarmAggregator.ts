@@ -10,6 +10,7 @@ import { AuthService } from './AuthService.js';
 import { MessageProcessor } from './MessageProcessor.js';
 import { NodeManager } from './NodeManager.js';
 import { StateManager } from './StateManager.js';
+import { WakuPublish } from './WakuPublish.js';
 
 const GSOC_BEE_URL = getEnvVariable('GSOC_BEE_URL');
 const GSOC_RESOURCE_ID = getEnvVariable('GSOC_RESOURCE_ID');
@@ -41,7 +42,8 @@ export class SwarmAggregator {
   private authService: AuthService;
   private stateManager: StateManager;
   private messageProcessor: MessageProcessor;
-  private nodeManager?: NodeManager;
+  private nodeManager: NodeManager;
+  private wakuPublisher: WakuPublish;
 
   // Message deduplication cache
   private messageCache = new Map<string, null>();
@@ -66,6 +68,7 @@ export class SwarmAggregator {
     this.nodeManager = new NodeManager(GATEWAY_URL, NGINX_ADMIN_SECRET);
     this.stateManager = new StateManager(this.nodeManager);
     this.messageProcessor = new MessageProcessor(this.authService, this.stateManager);
+    this.wakuPublisher = new WakuPublish(STREAM_KEY, STREAM_TOPIC);
   }
 
   public async init() {
@@ -79,6 +82,7 @@ export class SwarmAggregator {
 
       const feedReader = this.writerBee.makeFeedReader(topic, publicKey);
 
+      await this.wakuPublisher.init();
       const data = await feedReader.downloadPayload();
 
       this.logger.info(`init feed index: ${data.feedIndex.toString()}`);
@@ -160,11 +164,14 @@ export class SwarmAggregator {
     const feedWriter = this.writerBee.makeFeedWriter(topic, this.streamSigner);
     const nextIndex = this.index ? this.index.next() : FeedIndex.fromBigInt(BigInt(0));
 
-    const res = await feedWriter.uploadPayload(STREAM_STAMP, JSON.stringify(state), {
-      index: nextIndex,
-    });
+    const [feedRes] = await Promise.all([
+      feedWriter.uploadPayload(STREAM_STAMP, JSON.stringify(state), {
+        index: nextIndex,
+      }),
+      this.wakuPublisher.publishStreamListUpdate(state),
+    ]);
 
-    this.logger.info(`Feed write result: ${res.reference}, Index: ${nextIndex.toString()}`);
+    this.logger.info(`Feed write result: ${feedRes.reference}, Index: ${nextIndex.toString()}`);
     this.index = nextIndex;
   }
 
