@@ -5,12 +5,12 @@ import { getEnvVariable } from '../common.js';
 import { ErrorHandler } from '../libs/error.js';
 import { Logger } from '../libs/logger.js';
 import { StateEntry } from '../types.js';
+import { ProtoMessage } from '../waku/ProtoMessage.js';
 
 import { AuthService } from './AuthService.js';
 import { MessageProcessor } from './MessageProcessor.js';
 import { NodeManager } from './NodeManager.js';
 import { StateManager } from './StateManager.js';
-import { WakuPublish } from './WakuPublish.js';
 
 const GSOC_BEE_URL = getEnvVariable('GSOC_BEE_URL');
 const GSOC_RESOURCE_ID = getEnvVariable('GSOC_RESOURCE_ID');
@@ -43,7 +43,7 @@ export class SwarmAggregator {
   private stateManager: StateManager;
   private messageProcessor: MessageProcessor;
   private nodeManager: NodeManager;
-  private wakuPublisher: WakuPublish;
+  private wakuPublisher: ProtoMessage;
 
   // Message deduplication cache
   private messageCache = new Map<string, null>();
@@ -68,7 +68,7 @@ export class SwarmAggregator {
     this.nodeManager = new NodeManager(GATEWAY_URL, NGINX_ADMIN_SECRET);
     this.stateManager = new StateManager(this.nodeManager);
     this.messageProcessor = new MessageProcessor(this.authService, this.stateManager);
-    this.wakuPublisher = new WakuPublish(STREAM_KEY, STREAM_TOPIC);
+    this.wakuPublisher = new ProtoMessage(STREAM_KEY, STREAM_TOPIC);
   }
 
   public async init() {

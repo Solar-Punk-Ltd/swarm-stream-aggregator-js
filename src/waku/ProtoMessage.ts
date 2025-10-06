@@ -6,13 +6,14 @@ import { fileURLToPath } from 'url';
 
 import { Logger } from '../libs/logger.js';
 import { StateEntry } from '../types.js';
-import { Waku } from '../waku/Waku.js';
+
+import { Waku } from './Waku.js';
 
 const { load } = protobuf;
 type Root = protobuf.Root;
 type Type = protobuf.Type;
 
-export class WakuPublish {
+export class ProtoMessage {
   private logger = Logger.getInstance();
 
   private wakuPush: Waku;
@@ -28,7 +29,7 @@ export class WakuPublish {
   public async init(): Promise<void> {
     // Load protobuf definitions
     const __dirname = path.dirname(fileURLToPath(import.meta.url));
-    this.protoRoot = await load(path.join(__dirname, '../waku/streamList.proto'));
+    this.protoRoot = await load(path.join(__dirname, './streamList.proto'));
     this.protoRoot.resolveAll();
     this.streamListType = this.protoRoot.lookupType('StreamList');
 
