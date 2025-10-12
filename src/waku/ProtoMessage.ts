@@ -23,11 +23,10 @@ export class ProtoMessage {
   private streamListType: Type | null = null;
 
   constructor(private streamKey: string, private streamTopic: string) {
-    this.wakuPush = new Waku();
+    this.wakuPush = Waku.getInstance();
   }
 
   public async init(): Promise<void> {
-    // Load protobuf definitions
     const __dirname = path.dirname(fileURLToPath(import.meta.url));
     this.protoRoot = await load(path.join(__dirname, './streamList.proto'));
     this.protoRoot.resolveAll();
@@ -35,6 +34,7 @@ export class ProtoMessage {
 
     const signerPublicKey = new PrivateKey(this.streamKey).publicKey().address().toHex().toLocaleLowerCase();
     const topicName = `${signerPublicKey}-${this.streamTopic}`;
+
     this.encoder = this.wakuPush.createWakuEncoder(topicName);
 
     this.logger.info(`WakuPublish initialized for stream: ${topicName}`);

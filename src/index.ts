@@ -6,7 +6,7 @@ import 'dotenv/config';
 import { ErrorHandler } from './libs/error.js';
 import { Logger } from './libs/logger.js';
 import { SwarmAggregator } from './services/SwarmAggregator.js';
-import { getEnvVariableWithDefault } from './common.js';
+import { getEnvVariableWithDefault } from './utils/common.js';
 
 async function main() {
   const aggregator = new SwarmAggregator();

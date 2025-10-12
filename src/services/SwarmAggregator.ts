@@ -1,10 +1,10 @@
 import { Bee, Bytes, FeedIndex, Identifier, PrivateKey, Topic } from '@ethersphere/bee-js';
 import PQueue from 'p-queue';
 
-import { getEnvVariable } from '../common.js';
 import { ErrorHandler } from '../libs/error.js';
 import { Logger } from '../libs/logger.js';
 import { StateEntry } from '../types.js';
+import { getEnvVariable } from '../utils/common.js';
 import { ProtoMessage } from '../waku/ProtoMessage.js';
 
 import { AuthService } from './AuthService.js';
