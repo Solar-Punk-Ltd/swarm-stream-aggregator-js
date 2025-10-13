@@ -3,10 +3,10 @@ import { createRoutingInfo } from '@waku/utils';
 
 import { ErrorHandler } from '../libs/error.js';
 import { Logger } from '../libs/logger.js';
-import { getEnvVariable } from '../utils/common.js';
+import { getOptionalEnvVariable } from '../utils/common.js';
 
 const WAKU_CLUSTER_ID = 1;
-const WAKU_STATIC_PEER = getEnvVariable('WAKU_STATIC_PEER');
+const WAKU_STATIC_PEER = getOptionalEnvVariable('WAKU_STATIC_PEER');
 
 export class Waku {
   private readonly logger = Logger.getInstance();
@@ -59,14 +59,19 @@ export class Waku {
     const node = await createLightNode({
       networkConfig,
       bootstrapPeers: WAKU_STATIC_PEER ? [WAKU_STATIC_PEER] : undefined,
-      defaultBootstrap: !WAKU_STATIC_PEER,
+      defaultBootstrap: !!WAKU_STATIC_PEER,
+      discovery: {
+        dns: true,
+        peerExchange: true,
+        peerCache: false,
+      },
     });
 
     this.logger.info('Light Node created');
     await node.start();
     this.logger.info('Waku Light Node started');
 
-    await node.waitForPeers([Protocols.LightPush], 30000);
+    await node.waitForPeers([Protocols.LightPush, Protocols.Filter], 30000);
 
     this.logger.info('Connected to peers supporting LightPush');
     this.logger.info('Node ID:', node.libp2p.peerId.toString());
@@ -144,7 +149,7 @@ export class Waku {
       numShardsInCluster: 8,
     };
 
-    const contentTopic = `solarpunk-msrs/1/${topicName}/proto`;
+    const contentTopic = `/solarpunk-msrs/1/${topicName}/proto`;
     const routingInfo = createRoutingInfo(networkConfig, { contentTopic });
 
     return createEncoder({

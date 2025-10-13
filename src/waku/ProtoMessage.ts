@@ -27,6 +27,8 @@ export class ProtoMessage {
   }
 
   public async init(): Promise<void> {
+    await this.wakuPush.init();
+
     const __dirname = path.dirname(fileURLToPath(import.meta.url));
     this.protoRoot = await load(path.join(__dirname, './streamList.proto'));
     this.protoRoot.resolveAll();
