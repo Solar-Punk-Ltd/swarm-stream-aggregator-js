@@ -71,7 +71,7 @@ export class Waku {
     await node.start();
     this.logger.info('Waku Light Node started');
 
-    await node.waitForPeers([Protocols.LightPush, Protocols.Filter], 30000);
+    await node.waitForPeers([Protocols.LightPush], 30000);
 
     this.logger.info('Connected to peers supporting LightPush');
     this.logger.info('Node ID:', node.libp2p.peerId.toString());
@@ -155,7 +155,7 @@ export class Waku {
     return createEncoder({
       contentTopic,
       routingInfo,
-      ephemeral: true,
+      ephemeral: false,
     });
   }
 
@@ -169,11 +169,6 @@ export class Waku {
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
-        // experimental - network tests
-        await node.lightPush.send(encoder, { payload });
-        await node.lightPush.send(encoder, { payload });
-        await node.lightPush.send(encoder, { payload });
-        await node.lightPush.send(encoder, { payload });
         await node.lightPush.send(encoder, { payload });
 
         this.consecutiveSendFailures = 0;
