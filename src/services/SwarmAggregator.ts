@@ -200,4 +200,32 @@ export class SwarmAggregator {
 
     return true;
   }
+
+  public async getWakuInfo(): Promise<any> {
+    try {
+      const wakuInstance = this.wakuPublisher.getWaku();
+      if (wakuInstance) {
+        return await wakuInstance.getNodeInfo();
+      }
+      return { status: 'not_available', error: 'Waku publisher not initialized' };
+    } catch (error) {
+      this.errorHandler.handleError(error, 'SwarmAggregator.getWakuInfo');
+      return { status: 'error', error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+
+  public async restartWaku(): Promise<void> {
+    try {
+      const wakuInstance = this.wakuPublisher.getWaku();
+      if (wakuInstance) {
+        await wakuInstance.restart();
+        this.logger.info('Waku node restarted via API');
+      } else {
+        throw new Error('Waku publisher not initialized');
+      }
+    } catch (error) {
+      this.errorHandler.handleError(error, 'SwarmAggregator.restartWaku');
+      throw error;
+    }
+  }
 }
