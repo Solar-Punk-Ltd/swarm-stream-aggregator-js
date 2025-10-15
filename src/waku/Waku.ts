@@ -5,7 +5,7 @@ import { ErrorHandler } from '../libs/error.js';
 import { Logger } from '../libs/logger.js';
 import { getOptionalEnvVariable } from '../utils/common.js';
 
-const WAKU_CLUSTER_ID = 0;
+const WAKU_CLUSTER_ID = 1;
 const WAKU_NUM_SHARDS_IN_CLUSTER = 8;
 const WAKU_STATIC_PEER = getOptionalEnvVariable('WAKU_STATIC_PEER');
 
