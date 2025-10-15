@@ -5,7 +5,7 @@ import { ErrorHandler } from '../libs/error.js';
 import { Logger } from '../libs/logger.js';
 import { getOptionalEnvVariable } from '../utils/common.js';
 
-const WAKU_CLUSTER_ID = 1;
+const WAKU_CLUSTER_ID = 0;
 const WAKU_STATIC_PEER = getOptionalEnvVariable('WAKU_STATIC_PEER');
 
 export class Waku {
@@ -53,7 +53,6 @@ export class Waku {
   private async createWakuLightNode(): Promise<LightNode> {
     const networkConfig = {
       clusterId: WAKU_CLUSTER_ID,
-      numShardsInCluster: 8,
     };
 
     const node = await createLightNode({
@@ -146,7 +145,6 @@ export class Waku {
   public createWakuEncoder(topicName: string): Encoder {
     const networkConfig = {
       clusterId: WAKU_CLUSTER_ID,
-      numShardsInCluster: 8,
     };
 
     const contentTopic = `/solarpunk-msrs/1/${topicName}/proto`;
