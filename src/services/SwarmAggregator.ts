@@ -5,12 +5,12 @@ import { ErrorHandler } from '../libs/error.js';
 import { Logger } from '../libs/logger.js';
 import { StateEntry } from '../types.js';
 import { getEnvVariable } from '../utils/common.js';
-import { ProtoMessage } from '../waku/ProtoMessage.js';
 
 import { AuthService } from './AuthService.js';
 import { MessageProcessor } from './MessageProcessor.js';
 import { NodeManager } from './NodeManager.js';
 import { StateManager } from './StateManager.js';
+import { WakuHandler } from './Waku.js';
 
 const GSOC_BEE_URL = getEnvVariable('GSOC_BEE_URL');
 const GSOC_RESOURCE_ID = getEnvVariable('GSOC_RESOURCE_ID');
@@ -43,9 +43,8 @@ export class SwarmAggregator {
   private stateManager: StateManager;
   private messageProcessor: MessageProcessor;
   private nodeManager: NodeManager;
-  private wakuPublisher: ProtoMessage;
+  private wakuHandler: WakuHandler;
 
-  // Message deduplication cache
   private messageCache = new Map<string, null>();
   private readonly maxCacheSize = 50_000;
   private readonly minCacheSize = 1_000;
@@ -68,7 +67,7 @@ export class SwarmAggregator {
     this.nodeManager = new NodeManager(GATEWAY_URL, NGINX_ADMIN_SECRET);
     this.stateManager = new StateManager(this.nodeManager);
     this.messageProcessor = new MessageProcessor(this.authService, this.stateManager);
-    this.wakuPublisher = new ProtoMessage(STREAM_KEY, STREAM_TOPIC);
+    this.wakuHandler = new WakuHandler(STREAM_KEY, STREAM_TOPIC);
   }
 
   public async init() {
@@ -82,7 +81,7 @@ export class SwarmAggregator {
 
       const feedReader = this.writerBee.makeFeedReader(topic, publicKey);
 
-      await this.wakuPublisher.init();
+      await this.wakuHandler.init();
       const data = await feedReader.downloadPayload();
 
       this.logger.info(`init feed index: ${data.feedIndex.toString()}`);
@@ -168,7 +167,7 @@ export class SwarmAggregator {
       feedWriter.uploadPayload(STREAM_STAMP, JSON.stringify(state), {
         index: nextIndex,
       }),
-      this.wakuPublisher.publishStreamListUpdate(state),
+      this.wakuHandler.sendStreamList(state),
     ]);
 
     this.logger.info(`Feed write result: ${feedRes.reference}, Index: ${nextIndex.toString()}`);
@@ -199,33 +198,5 @@ export class SwarmAggregator {
     }
 
     return true;
-  }
-
-  public async getWakuInfo(): Promise<any> {
-    try {
-      const wakuInstance = this.wakuPublisher.getWaku();
-      if (wakuInstance) {
-        return await wakuInstance.getNodeInfo();
-      }
-      return { status: 'not_available', error: 'Waku publisher not initialized' };
-    } catch (error) {
-      this.errorHandler.handleError(error, 'SwarmAggregator.getWakuInfo');
-      return { status: 'error', error: error instanceof Error ? error.message : 'Unknown error' };
-    }
-  }
-
-  public async restartWaku(): Promise<void> {
-    try {
-      const wakuInstance = this.wakuPublisher.getWaku();
-      if (wakuInstance) {
-        await wakuInstance.restart();
-        this.logger.info('Waku node restarted via API');
-      } else {
-        throw new Error('Waku publisher not initialized');
-      }
-    } catch (error) {
-      this.errorHandler.handleError(error, 'SwarmAggregator.restartWaku');
-      throw error;
-    }
   }
 }
