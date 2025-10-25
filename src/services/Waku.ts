@@ -39,7 +39,7 @@ export class WakuHandler {
   private streamListType: InstanceType<typeof protobuf.Type> | null = null;
 
   private contentTopic: string | null = null;
-  private readonly channelName = 'solarpunk-msrs-channel';
+  private readonly channelName = 'solarpunk-msrs-stream-channel';
   private readonly senderId = crypto.randomBytes(8).toString('hex');
 
   private messageTrackers = new Map<string, MessageTracker>();
@@ -52,11 +52,8 @@ export class WakuHandler {
   private static readonly NODE_RESTART_DELAY = 2000;
 
   constructor(streamKey: string, streamTopic: string) {
-    this.contentTopic = `/solarpunk-msrs/1/${new PrivateKey(streamKey)
-      .publicKey()
-      .address()
-      .toHex()
-      .toLocaleLowerCase()}-${streamTopic}/proto`;
+    const streamOwner = new PrivateKey(streamKey).publicKey().address().toHex().toLocaleLowerCase();
+    this.contentTopic = `/solarpunk-msrs/1/${streamOwner}-${streamTopic}/proto`;
   }
 
   public async init(): Promise<void> {
@@ -80,7 +77,9 @@ export class WakuHandler {
     const encoder = this.node.createEncoder({ contentTopic: this.contentTopic });
     const decoder = this.node.createDecoder({ contentTopic: this.contentTopic });
 
-    this.reliableChannel = await ReliableChannel.create(this.node, this.channelName, this.senderId, encoder, decoder);
+    this.reliableChannel = await ReliableChannel.create(this.node, this.channelName, this.senderId, encoder, decoder, {
+      retryIntervalMs: 10000,
+    });
 
     this.setupChannelEventListeners();
   }
@@ -130,20 +129,6 @@ export class WakuHandler {
     this.reliableChannel.addEventListener('sending-message-irrecoverable-error', event => {
       this.handleSendError((event as CustomEvent).detail);
     });
-
-    if (this.reliableChannel.messageChannel) {
-      this.reliableChannel.messageChannel.addEventListener('sds:out:sync-sent' as any, event => {
-        const detail = (event as CustomEvent).detail;
-        const historyIds = detail.causalHistory
-          ?.map((ch: any) => getShortMessageId(ch.messageId?.toString() || ''))
-          .join(', ');
-        this.logger.info(`Sync message sent with history: ${historyIds}`);
-      });
-
-      this.reliableChannel.messageChannel.addEventListener('sds:in:message-missing' as any, event => {
-        this.handleMissingMessages((event as CustomEvent).detail);
-      });
-    }
   }
 
   private handleHealthChange(health: HealthStatus): void {
@@ -237,32 +222,6 @@ export class WakuHandler {
       } else {
         this.logger.error(`Message ${detail.messageId} failed after ${this.maxRetries} retries`);
         this.messageTrackers.delete(detail.messageId);
-      }
-    }
-  }
-
-  private handleMissingMessages(detail: any): void {
-    const missingMessageIds: string[] = detail.missingMessages || detail.messageIds || [];
-
-    if (missingMessageIds.length === 0) {
-      return;
-    }
-
-    for (const messageId of missingMessageIds) {
-      const tracker = this.messageTrackers.get(messageId);
-
-      if (tracker && tracker.status !== MessageStatus.Acknowledged && tracker.retryCount < this.maxRetries) {
-        this.logger.info(`Retrying missing message: ${getShortMessageId(messageId)}...`);
-        this.retryMessage(tracker);
-        return;
-      }
-      if (tracker && tracker.retryCount >= this.maxRetries) {
-        this.logger.error(`Missing message ${getShortMessageId(messageId)}... has exceeded retry limit`);
-        this.messageTrackers.delete(messageId);
-        return;
-      }
-      if (!tracker) {
-        this.logger.warn(`No tracker found for missing message: ${getShortMessageId(messageId)}...`);
       }
     }
   }
