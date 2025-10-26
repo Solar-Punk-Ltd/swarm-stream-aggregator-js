@@ -1,6 +1,6 @@
 import { Logger } from '../libs/logger.js';
 import { StateManager } from '../services/StateManager.js';
-import { StateEntry } from '../types.js';
+import { StateArrayWithTimestamp } from '../types.js';
 
 import { HandlerContext, ProcessResult } from './types.js';
 
@@ -35,5 +35,5 @@ export abstract class BaseHandler {
   }
 
   protected abstract validate(context: HandlerContext): Promise<ProcessResult>;
-  protected abstract execute(context: HandlerContext): Promise<StateEntry[]>;
+  protected abstract execute(context: HandlerContext): Promise<StateArrayWithTimestamp>;
 }

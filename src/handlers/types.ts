@@ -1,13 +1,13 @@
-import { Message, StateEntry } from '../types.js';
+import { Message, StateArrayWithTimestamp } from '../types.js';
 
 export interface HandlerContext {
-  previousState: StateEntry[];
+  previousState: StateArrayWithTimestamp;
   message: Message;
   logger: any;
 }
 
 export interface ProcessResult {
   success: boolean;
-  state?: StateEntry[];
+  state?: StateArrayWithTimestamp;
   error?: string;
 }

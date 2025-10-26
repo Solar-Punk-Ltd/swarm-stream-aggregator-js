@@ -1,11 +1,11 @@
 import { PrivateKey } from '@ethersphere/bee-js';
-import { createLightNode, HealthStatus, type LightNode, ReliableChannel, WakuEvent } from '@waku/sdk';
+import { createLightNode, HealthStatus, type LightNode, ReliableChannel, WakuEvent } from '@solarpunkltd/waku-sdk';
 import crypto from 'crypto';
 import protobuf from 'protobufjs';
 
 import { ErrorHandler } from '../libs/error.js';
 import { Logger } from '../libs/logger.js';
-import { StateEntry } from '../types.js';
+import { StateArrayWithTimestamp } from '../types.js';
 import { getEnvVariable, getShortMessageId, sleep } from '../utils/common.js';
 
 const WAKU_STATIC_PEER = getEnvVariable('WAKU_STATIC_PEER');
@@ -46,7 +46,7 @@ export class WakuHandler {
   private readonly maxRetries = 5;
   private currentHealth: HealthStatus = HealthStatus.Unhealthy;
 
-  private static readonly RECOVERY_DELAY_MINIMAL = 4000;
+  private static readonly RECOVERY_DELAY_MINIMAL = 8000;
   private static readonly RECOVERY_DELAY_UNHEALTHY = 10000;
   private static readonly RECOVERY_DELAY_RETRY = 20000;
   private static readonly NODE_RESTART_DELAY = 2000;
@@ -102,7 +102,8 @@ export class WakuHandler {
 
     this.streamListType = new protobuf.Type('StreamList')
       .add(StreamEntryType)
-      .add(new protobuf.Field('entries', 1, 'StreamEntry', 'repeated'));
+      .add(new protobuf.Field('entries', 1, 'StreamEntry', 'repeated'))
+      .add(new protobuf.Field('lastModified', 2, 'uint64'));
 
     this.logger.info('Protobuf schema created');
   }
@@ -132,6 +133,10 @@ export class WakuHandler {
   }
 
   private handleHealthChange(health: HealthStatus): void {
+    if (this.currentHealth === health) {
+      return;
+    }
+
     this.currentHealth = health;
 
     switch (health) {
@@ -261,7 +266,7 @@ export class WakuHandler {
     }
   }
 
-  public async sendStreamList(streamList: StateEntry[]): Promise<{
+  public async sendStreamList(streamList: StateArrayWithTimestamp): Promise<{
     success: boolean;
     messageId: string;
     entriesCount: number;
@@ -274,7 +279,7 @@ export class WakuHandler {
 
     const timestamp = Date.now();
 
-    const streamListMessage = { entries: streamList };
+    const streamListMessage = { entries: streamList.entries, lastModified: streamList.lastModified };
     const payload = this.streamListType.encode(this.streamListType.create(streamListMessage)).finish();
 
     const payloadArray = new Uint8Array(payload);
@@ -292,7 +297,7 @@ export class WakuHandler {
       this.messageTrackers.set(messageId, tracker);
 
       this.logger.info(
-        `Sending stream list with ID: ${getShortMessageId(messageId)}..., entries: ${streamList.length}`,
+        `Sending stream list with ID: ${getShortMessageId(messageId)}..., entries: ${streamList.entries.length}`,
       );
 
       await sleep(100);
@@ -303,7 +308,7 @@ export class WakuHandler {
       return {
         success: status !== MessageStatus.Failed,
         messageId,
-        entriesCount: streamList.length,
+        entriesCount: streamList.entries.length,
         timestamp,
         status,
       };

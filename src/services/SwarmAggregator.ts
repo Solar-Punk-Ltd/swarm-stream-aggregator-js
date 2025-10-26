@@ -3,7 +3,7 @@ import PQueue from 'p-queue';
 
 import { ErrorHandler } from '../libs/error.js';
 import { Logger } from '../libs/logger.js';
-import { StateEntry } from '../types.js';
+import { StateArrayWithTimestamp } from '../types.js';
 import { getEnvVariable } from '../utils/common.js';
 
 import { AuthService } from './AuthService.js';
@@ -119,7 +119,13 @@ export class SwarmAggregator {
 
       const previousState = await this.fetchPreviousState();
 
-      const result = await this.messageProcessor.processMessage(message, previousState || []);
+      const result = await this.messageProcessor.processMessage(
+        message,
+        previousState || {
+          entries: [],
+          lastModified: Date.now(),
+        },
+      );
 
       if (!result.success) {
         this.logger.error(`Failed to process message: ${result.error}`);
@@ -134,7 +140,7 @@ export class SwarmAggregator {
     }
   }
 
-  private async fetchPreviousState(): Promise<StateEntry[] | null> {
+  private async fetchPreviousState(): Promise<StateArrayWithTimestamp | null> {
     if (this.index === null) {
       return null;
     }
@@ -150,7 +156,7 @@ export class SwarmAggregator {
 
       this.logger.info(`Fetched previous state: ${data.feedIndex.toString()}`);
 
-      const jsonState = data.payload.toJSON() as StateEntry[];
+      const jsonState = data.payload.toJSON() as StateArrayWithTimestamp;
       return jsonState;
     } catch (error) {
       this.errorHandler.handleError(error, 'SwarmAggregator.fetchPreviousState');
@@ -158,7 +164,7 @@ export class SwarmAggregator {
     }
   }
 
-  private async writeStateToFeed(state: StateEntry[]): Promise<void> {
+  private async writeStateToFeed(state: StateArrayWithTimestamp): Promise<void> {
     const topic = Topic.fromString(STREAM_TOPIC);
     const feedWriter = this.writerBee.makeFeedWriter(topic, this.streamSigner);
     const nextIndex = this.index ? this.index.next() : FeedIndex.fromBigInt(BigInt(0));

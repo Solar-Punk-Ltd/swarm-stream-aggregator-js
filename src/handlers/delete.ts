@@ -1,4 +1,4 @@
-import { DeleteMessage, StateEntry } from '../types.js';
+import { DeleteMessage, StateArrayWithTimestamp } from '../types.js';
 
 import { BaseHandler } from './base.js';
 import { HandlerContext, ProcessResult } from './types.js';
@@ -19,7 +19,7 @@ export class DeleteHandler extends BaseHandler {
     return { success: true };
   }
 
-  protected async execute(context: HandlerContext): Promise<StateEntry[]> {
+  protected async execute(context: HandlerContext): Promise<StateArrayWithTimestamp> {
     const message = context.message as DeleteMessage;
 
     this.logger.info(`Deleting entry with id: ${message.data.owner}:${message.data.topic}`);

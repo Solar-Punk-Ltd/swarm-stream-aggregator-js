@@ -6,7 +6,7 @@ import { DeleteHandler } from '../handlers/delete.js';
 import { ProcessResult } from '../handlers/types.js';
 import { UpdateHandler } from '../handlers/update.js';
 import { Logger } from '../libs/logger.js';
-import { ActionType, Message, StateEntry } from '../types.js';
+import { ActionType, Message, StateArrayWithTimestamp } from '../types.js';
 
 import { AuthService } from './AuthService.js';
 import { StateManager } from './StateManager.js';
@@ -26,7 +26,7 @@ export class MessageProcessor {
     ]);
   }
 
-  public async processMessage(messageBytes: Bytes, previousState: StateEntry[]): Promise<ProcessResult> {
+  public async processMessage(messageBytes: Bytes, previousState: StateArrayWithTimestamp): Promise<ProcessResult> {
     try {
       const token = this.parseToken(messageBytes);
 
@@ -46,8 +46,8 @@ export class MessageProcessor {
       }
 
       const result = await handler.handle({
-        previousState,
         message,
+        previousState,
         logger: this.logger,
       });
 

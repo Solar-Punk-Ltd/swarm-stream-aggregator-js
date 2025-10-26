@@ -1,4 +1,4 @@
-import { CreateMessage, StateEntry } from '../types.js';
+import { CreateMessage, StateArrayWithTimestamp } from '../types.js';
 
 import { BaseHandler } from './base.js';
 import { HandlerContext, ProcessResult } from './types.js';
@@ -18,7 +18,7 @@ export class CreateHandler extends BaseHandler {
     return { success: true };
   }
 
-  protected async execute(context: HandlerContext): Promise<StateEntry[]> {
+  protected async execute(context: HandlerContext): Promise<StateArrayWithTimestamp> {
     const message = context.message as CreateMessage;
 
     this.logger.info(`Creating new entry with id: ${message.data.owner}:${message.data.topic}`);

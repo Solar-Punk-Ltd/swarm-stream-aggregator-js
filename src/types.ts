@@ -32,6 +32,11 @@ export interface DeleteMessage {
 
 export type Message = CreateMessage | UpdateMessage | DeleteMessage;
 
+export interface NodeInfo {
+  port: number;
+  stampHash: string;
+}
+
 export interface StateEntry {
   owner: string;
   topic: string;
@@ -46,4 +51,13 @@ export interface StateEntry {
   description?: string;
   scheduledStartTime?: string;
   pinned?: boolean;
+  nodes: {
+    media: NodeInfo;
+    chat: NodeInfo;
+  };
+}
+
+export interface StateArrayWithTimestamp {
+  entries: StateEntry[];
+  lastModified: number;
 }

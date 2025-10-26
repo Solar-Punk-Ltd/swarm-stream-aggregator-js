@@ -1,5 +1,5 @@
 import { Logger } from '../libs/logger.js';
-import { StateEntry } from '../types.js';
+import { StateArrayWithTimestamp, StateEntry } from '../types.js';
 
 import { NodeManager } from './NodeManager.js';
 
@@ -9,8 +9,9 @@ export class StateManager {
 
   constructor(private nodeManager: NodeManager) {}
 
-  public createEntry(state: StateEntry[], newEntry: StateEntry): StateEntry[] {
-    const duplicate = state.find(entry => entry.owner === newEntry.owner && entry.topic === newEntry.topic);
+  public createEntry(state: StateArrayWithTimestamp, newEntry: StateEntry): StateArrayWithTimestamp {
+    const entries = state.entries;
+    const duplicate = entries.find(entry => entry.owner === newEntry.owner && entry.topic === newEntry.topic);
 
     if (duplicate) {
       throw new Error(`Entry already exists with id: ${`${newEntry.owner}:${newEntry.topic}`}`);
@@ -22,18 +23,24 @@ export class StateManager {
       updatedAt: Date.now(),
     };
 
-    if (state.length >= this.maxStateSize) {
+    if (entries.length >= this.maxStateSize) {
       this.logger.warn('State size limit reached (5 entries), removing oldest entry');
-      const updatedState = this.removeOldestUnpinnedEntry(state);
+      const updatedState = this.removeOldestUnpinnedEntry(entries);
 
-      return this.sortStateWithPinnedPriority([...updatedState, entryWithTimestamps]);
+      return this.createStateArrayWithTimestamp(
+        this.sortStateWithPinnedPriority([...updatedState, entryWithTimestamps]),
+      );
     }
 
-    return this.sortStateWithPinnedPriority([...state, entryWithTimestamps]);
+    return this.createStateArrayWithTimestamp(this.sortStateWithPinnedPriority([...entries, entryWithTimestamps]));
   }
 
-  public async updateEntry(state: StateEntry[], updates: Partial<StateEntry>): Promise<StateEntry[]> {
-    const index = state.findIndex(entry => entry.owner === updates.owner && entry.topic === updates.topic);
+  public async updateEntry(
+    state: StateArrayWithTimestamp,
+    updates: Partial<StateEntry>,
+  ): Promise<StateArrayWithTimestamp> {
+    const entries = state.entries;
+    const index = entries.findIndex(entry => entry.owner === updates.owner && entry.topic === updates.topic);
 
     if (index === -1) {
       throw new Error(`Entry not found with id: ${`${updates.owner}:${updates.topic}`}`);
@@ -52,20 +59,25 @@ export class StateManager {
     }
 
     const updatedEntry = {
-      ...state[index],
+      ...entries[index],
       ...updates,
-      createdAt: state[index].createdAt,
+      createdAt: entries[index].createdAt,
       updatedAt: Date.now(),
     };
 
-    const newState = [...state];
+    const newState = [...entries];
     newState[index] = updatedEntry;
 
-    return this.sortStateWithPinnedPriority(newState);
+    return this.createStateArrayWithTimestamp(this.sortStateWithPinnedPriority(newState));
   }
 
-  public async deleteEntry(state: StateEntry[], owner: string, topic: string): Promise<StateEntry[]> {
-    const entryToDelete = state.find(entry => entry.owner === owner && entry.topic === topic);
+  public async deleteEntry(
+    state: StateArrayWithTimestamp,
+    owner: string,
+    topic: string,
+  ): Promise<StateArrayWithTimestamp> {
+    const entries = state.entries;
+    const entryToDelete = entries.find(entry => entry.owner === owner && entry.topic === topic);
 
     if (!entryToDelete) {
       throw new Error(`Entry not found with id: ${`${owner}:${topic}`}`);
@@ -81,12 +93,13 @@ export class StateManager {
       throw error;
     }
 
-    const filtered = state.filter(entry => !(entry.owner === owner && entry.topic === topic));
-    return filtered;
+    const filtered = entries.filter(entry => !(entry.owner === owner && entry.topic === topic));
+    return this.createStateArrayWithTimestamp(filtered);
   }
 
-  public findEntry(state: StateEntry[], owner: string, topic: string): StateEntry | undefined {
-    return state.find(entry => entry.owner === owner && entry.topic === topic);
+  public findEntry(state: StateArrayWithTimestamp, owner: string, topic: string): StateEntry | undefined {
+    const entries = state.entries;
+    return entries.find(entry => entry.owner === owner && entry.topic === topic);
   }
 
   public validateEntry(entry: StateEntry): boolean {
@@ -130,5 +143,12 @@ export class StateManager {
 
   private async unlockStreamNodes(streamId: string): Promise<void> {
     await this.nodeManager.unlockStreamNodes(streamId, true);
+  }
+
+  public createStateArrayWithTimestamp(entries: StateEntry[]): StateArrayWithTimestamp {
+    return {
+      entries,
+      lastModified: Date.now(),
+    };
   }
 }
