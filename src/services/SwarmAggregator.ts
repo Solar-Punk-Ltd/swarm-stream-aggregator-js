@@ -49,6 +49,9 @@ export class SwarmAggregator {
   private readonly maxCacheSize = 50_000;
   private readonly minCacheSize = 1_000;
 
+  private isInitialized = false;
+  private isShuttingDown = false;
+
   constructor() {
     this.gsocBee = new Bee(GSOC_BEE_URL, {
       headers: {
@@ -71,6 +74,11 @@ export class SwarmAggregator {
   }
 
   public async init() {
+    if (this.isInitialized) {
+      this.logger.warn('SwarmAggregator already initialized');
+      return;
+    }
+
     try {
       const topic = Topic.fromString(STREAM_TOPIC);
       const publicKey = this.streamSigner.publicKey().address();
@@ -82,16 +90,21 @@ export class SwarmAggregator {
       const feedReader = this.writerBee.makeFeedReader(topic, publicKey);
 
       await this.wakuHandler.init();
+
       const data = await feedReader.downloadPayload();
 
       this.logger.info(`init feed index: ${data.feedIndex.toString()}`);
       this.index = data.feedIndex;
+
+      this.isInitialized = true;
     } catch (error) {
       if (error instanceof Error && error.message.includes('404')) {
         this.index = null;
         this.logger.info('init: No existing feed found, starting fresh');
+        this.isInitialized = true;
       } else {
         this.errorHandler.handleError(error, 'SwarmAggregator.init');
+        throw error;
       }
     }
   }
@@ -204,5 +217,30 @@ export class SwarmAggregator {
     }
 
     return true;
+  }
+
+  public async cleanup(): Promise<void> {
+    if (this.isShuttingDown) {
+      this.logger.warn('SwarmAggregator cleanup already in progress');
+      return;
+    }
+
+    this.isShuttingDown = true;
+    this.logger.info('Starting SwarmAggregator cleanup...');
+
+    try {
+      this.queue.clear();
+      await this.queue.onIdle();
+
+      this.messageCache.clear();
+
+      await this.wakuHandler.cleanup();
+
+      this.isInitialized = false;
+      this.logger.info('SwarmAggregator cleanup completed');
+    } catch (error) {
+      this.logger.error('Error during SwarmAggregator cleanup:', error);
+      throw error;
+    }
   }
 }

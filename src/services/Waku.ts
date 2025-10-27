@@ -30,6 +30,12 @@ interface MessageTracker {
   payload: Uint8Array;
 }
 
+interface ChannelListeners {
+  messageSent: ((event: Event) => void) | null;
+  messageAcknowledged: ((event: Event) => void) | null;
+  sendError: ((event: Event) => void) | null;
+}
+
 export class WakuHandler {
   private logger = Logger.getInstance();
   private errorHandler = ErrorHandler.getInstance();
@@ -45,6 +51,13 @@ export class WakuHandler {
   private messageTrackers = new Map<string, MessageTracker>();
   private readonly maxRetries = 5;
   private currentHealth: HealthStatus = HealthStatus.Unhealthy;
+
+  private nodeHealthListener: ((event: Event) => void) | null = null;
+  private channelListeners: ChannelListeners = {
+    messageSent: null,
+    messageAcknowledged: null,
+    sendError: null,
+  };
 
   private static readonly RECOVERY_DELAY_MINIMAL = 8000;
   private static readonly RECOVERY_DELAY_UNHEALTHY = 10000;
@@ -66,6 +79,8 @@ export class WakuHandler {
     if (this.contentTopic === null) {
       throw new Error('Content topic is null');
     }
+
+    await this.cleanupNodeAndChannel();
 
     this.node = await createLightNode({
       defaultBootstrap: true,
@@ -111,25 +126,75 @@ export class WakuHandler {
   private setupNodeEventListeners(): void {
     if (!this.node || !this.node.events) return;
 
-    this.node.events.addEventListener(WakuEvent.Health, event => {
+    this.cleanupNodeListeners();
+
+    this.nodeHealthListener = event => {
       this.handleHealthChange((event as CustomEvent).detail);
-    });
+    };
+
+    this.node.events.addEventListener(WakuEvent.Health, this.nodeHealthListener);
+  }
+
+  private cleanupNodeListeners(): void {
+    if (this.node?.events && this.nodeHealthListener) {
+      this.node.events.removeEventListener(WakuEvent.Health, this.nodeHealthListener);
+      this.nodeHealthListener = null;
+    }
   }
 
   private setupChannelEventListeners(): void {
     if (!this.reliableChannel) return;
 
-    this.reliableChannel.addEventListener('message-sent', event => {
+    this.cleanupChannelListeners();
+
+    this.channelListeners.messageSent = event => {
       this.handleMessageSent((event as CustomEvent).detail);
-    });
+    };
 
-    this.reliableChannel.addEventListener('message-acknowledged', event => {
+    this.channelListeners.messageAcknowledged = event => {
       this.handleMessageAcknowledged((event as CustomEvent).detail);
-    });
+    };
 
-    this.reliableChannel.addEventListener('sending-message-irrecoverable-error', event => {
+    this.channelListeners.sendError = event => {
       this.handleSendError((event as CustomEvent).detail);
-    });
+    };
+
+    this.reliableChannel.addEventListener('message-sent', this.channelListeners.messageSent!);
+    this.reliableChannel.addEventListener('message-acknowledged', this.channelListeners.messageAcknowledged!);
+    this.reliableChannel.addEventListener('sending-message-irrecoverable-error', this.channelListeners.sendError!);
+  }
+
+  private cleanupChannelListeners(): void {
+    if (!this.reliableChannel) return;
+
+    if (this.channelListeners.messageSent) {
+      this.reliableChannel.removeEventListener('message-sent', this.channelListeners.messageSent);
+      this.channelListeners.messageSent = null;
+    }
+
+    if (this.channelListeners.messageAcknowledged) {
+      this.reliableChannel.removeEventListener('message-acknowledged', this.channelListeners.messageAcknowledged);
+      this.channelListeners.messageAcknowledged = null;
+    }
+
+    if (this.channelListeners.sendError) {
+      this.reliableChannel.removeEventListener('sending-message-irrecoverable-error', this.channelListeners.sendError);
+      this.channelListeners.sendError = null;
+    }
+  }
+
+  private async cleanupNodeAndChannel(): Promise<void> {
+    if (this.reliableChannel) {
+      this.cleanupChannelListeners();
+      await this.reliableChannel.stop();
+      this.reliableChannel = null;
+    }
+
+    if (this.node) {
+      this.cleanupNodeListeners();
+      await this.node.stop();
+      this.node = null;
+    }
   }
 
   private handleHealthChange(health: HealthStatus): void {
@@ -173,14 +238,12 @@ export class WakuHandler {
         if (this.currentHealth === HealthStatus.Unhealthy || this.currentHealth === HealthStatus.MinimallyHealthy) {
           this.logger.info('Attempting to reconnect to Waku network...');
 
-          await this.node.stop();
-
+          await this.cleanupNodeAndChannel();
           await sleep(WakuHandler.NODE_RESTART_DELAY);
 
           await this.initializeWakuNode();
 
           this.logger.info('Health recovery attempt completed - node and channel recreated');
-
           this.retryPendingMessages();
         } else {
           this.logger.info('Health recovered naturally, no intervention needed');
@@ -319,12 +382,12 @@ export class WakuHandler {
   }
 
   public async cleanup(): Promise<void> {
+    this.logger.info('Starting WakuHandler cleanup...');
+
     this.messageTrackers.clear();
 
-    if (this.node) {
-      await this.node.stop();
-      this.node = null;
-      this.reliableChannel = null;
-    }
+    await this.cleanupNodeAndChannel();
+
+    this.logger.info('WakuHandler cleanup completed');
   }
 }
