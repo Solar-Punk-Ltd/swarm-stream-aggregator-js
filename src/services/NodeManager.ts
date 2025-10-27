@@ -70,7 +70,10 @@ export class NodeManager {
       const statusResponse = await this.axios.get('/admin/node/status');
       const status = statusResponse.data as StatusResponse;
 
-      const streamNodes = status.nodes.private_writers.filter(node => node.lock_info?.stream_id === streamId);
+      const normalizedStreamId = streamId.toLowerCase();
+      const streamNodes = status.nodes.private_writers.filter(
+        node => node.lock_info?.stream_id?.toLowerCase() === normalizedStreamId,
+      );
 
       if (streamNodes.length === 0) {
         throw new Error(`No locked nodes found for stream ID: ${streamId}`);
@@ -134,7 +137,10 @@ export class NodeManager {
       const statusResponse = await this.axios.get('/admin/node/status');
       const status = statusResponse.data as StatusResponse;
 
-      const streamNodes = status.nodes.private_writers.filter(node => node.lock_info?.stream_id === streamId);
+      const normalizedStreamId = streamId.toLowerCase();
+      const streamNodes = status.nodes.private_writers.filter(
+        node => node.lock_info?.stream_id?.toLowerCase() === normalizedStreamId,
+      );
 
       if (streamNodes.length === 0) {
         this.logger.info(`No nodes found for stream ${streamId} - nothing to unlock`);
