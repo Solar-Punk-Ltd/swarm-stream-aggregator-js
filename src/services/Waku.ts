@@ -59,6 +59,10 @@ export class WakuHandler {
     sendError: null,
   };
 
+  private isShuttingDown = false;
+  private recoveryTimeouts: NodeJS.Timeout[] = [];
+  private cleanupTimeouts: NodeJS.Timeout[] = [];
+
   private static readonly RECOVERY_DELAY_MINIMAL = 8000;
   private static readonly RECOVERY_DELAY_UNHEALTHY = 10000;
   private static readonly RECOVERY_DELAY_RETRY = 20000;
@@ -228,8 +232,13 @@ export class WakuHandler {
 
     this.logger.info(`Attempting health recovery in ${recoveryDelay}ms for ${healthType} health status...`);
 
-    setTimeout(async () => {
+    const timeoutId = setTimeout(async () => {
       try {
+        if (this.isShuttingDown) {
+          this.logger.info('Skipping recovery - shutdown in progress');
+          return;
+        }
+
         if (!this.node) {
           this.logger.error('Cannot recover: Node is null');
           return;
@@ -241,6 +250,11 @@ export class WakuHandler {
           await this.cleanupNodeAndChannel();
           await sleep(WakuHandler.NODE_RESTART_DELAY);
 
+          if (this.isShuttingDown) {
+            this.logger.info('Skipping node recreation - shutdown in progress');
+            return;
+          }
+
           await this.initializeWakuNode();
 
           this.logger.info('Health recovery attempt completed - node and channel recreated');
@@ -251,12 +265,23 @@ export class WakuHandler {
       } catch (error) {
         this.logger.error('Health recovery failed:', error);
 
-        if (healthType === HealthRecoveryType.Unhealthy) {
+        if (healthType === HealthRecoveryType.Unhealthy && !this.isShuttingDown) {
           this.logger.info(`Scheduling another recovery attempt in ${WakuHandler.RECOVERY_DELAY_RETRY}ms...`);
-          setTimeout(() => this.attemptHealthRecovery(HealthRecoveryType.Unhealthy), WakuHandler.RECOVERY_DELAY_RETRY);
+          const retryTimeoutId = setTimeout(
+            () => this.attemptHealthRecovery(HealthRecoveryType.Unhealthy),
+            WakuHandler.RECOVERY_DELAY_RETRY,
+          );
+          this.recoveryTimeouts.push(retryTimeoutId);
+        }
+      } finally {
+        const index = this.recoveryTimeouts.indexOf(timeoutId);
+        if (index > -1) {
+          this.recoveryTimeouts.splice(index, 1);
         }
       }
     }, recoveryDelay);
+
+    this.recoveryTimeouts.push(timeoutId);
   }
 
   private handleMessageSent(messageId: string): void {
@@ -273,9 +298,16 @@ export class WakuHandler {
       tracker.status = MessageStatus.Acknowledged;
       this.logger.info(`Message acknowledged: ${getShortMessageId(messageId)}...`);
 
-      setTimeout(() => {
+      const timeoutId = setTimeout(() => {
         this.messageTrackers.delete(messageId);
+
+        const index = this.cleanupTimeouts.indexOf(timeoutId);
+        if (index > -1) {
+          this.cleanupTimeouts.splice(index, 1);
+        }
       }, 5000);
+
+      this.cleanupTimeouts.push(timeoutId);
     }
   }
 
@@ -295,7 +327,7 @@ export class WakuHandler {
   }
 
   private async retryMessage(tracker: MessageTracker): Promise<void> {
-    if (!this.reliableChannel) return;
+    if (!this.reliableChannel || this.isShuttingDown) return;
 
     tracker.retryCount++;
     tracker.status = MessageStatus.Sending;
@@ -340,6 +372,10 @@ export class WakuHandler {
       throw new Error('WakuHandler not initialized');
     }
 
+    if (this.isShuttingDown) {
+      throw new Error('WakuHandler is shutting down');
+    }
+
     const timestamp = Date.now();
 
     const streamListMessage = { entries: streamList.entries, lastModified: streamList.lastModified };
@@ -382,7 +418,15 @@ export class WakuHandler {
   }
 
   public async cleanup(): Promise<void> {
+    this.isShuttingDown = true;
+
     this.logger.info('Starting WakuHandler cleanup...');
+
+    this.recoveryTimeouts.forEach(clearTimeout);
+    this.recoveryTimeouts = [];
+
+    this.cleanupTimeouts.forEach(clearTimeout);
+    this.cleanupTimeouts = [];
 
     this.messageTrackers.clear();
 
