@@ -263,7 +263,7 @@ export class WakuHandler {
           this.logger.info('Health recovered naturally, no intervention needed');
         }
       } catch (error) {
-        this.logger.error('Health recovery failed:', error);
+        this.errorHandler.handleError(error, `WakuHandler.attemptHealthRecovery[${healthType}]`);
 
         if (healthType === HealthRecoveryType.Unhealthy && !this.isShuttingDown) {
           this.logger.info(`Scheduling another recovery attempt in ${WakuHandler.RECOVERY_DELAY_RETRY}ms...`);
@@ -346,7 +346,7 @@ export class WakuHandler {
       tracker.messageId = newMessageId;
       this.messageTrackers.set(newMessageId, tracker);
     } catch (error) {
-      this.logger.error(`Retry failed for message ${tracker.messageId}:`, error);
+      this.errorHandler.handleError(error, `WakuHandler.retryMessage[${tracker.messageId}]`);
       tracker.status = MessageStatus.Failed;
     }
   }

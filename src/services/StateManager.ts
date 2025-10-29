@@ -1,3 +1,4 @@
+import { ErrorHandler } from '../libs/error.js';
 import { Logger } from '../libs/logger.js';
 import { StateArrayWithTimestamp, StateEntry } from '../types.js';
 
@@ -5,6 +6,7 @@ import { NodeManager } from './NodeManager.js';
 
 export class StateManager {
   private logger = Logger.getInstance();
+  private errorHandler = ErrorHandler.getInstance();
   private readonly maxStateSize = 5;
 
   constructor(private nodeManager: NodeManager) {}
@@ -53,7 +55,7 @@ export class StateManager {
       try {
         await this.nodeManager.toggleStreamPin(streamId, updates.pinned);
       } catch (error) {
-        this.logger.error(`Failed to toggle pin state for stream ${streamId}:`, error);
+        this.errorHandler.handleError(error, `StateManager.updateEntry.togglePin[${streamId}]`);
         throw error;
       }
     }
@@ -89,7 +91,7 @@ export class StateManager {
     try {
       await this.unlockStreamNodes(streamId);
     } catch (error) {
-      this.logger.error(`Failed to force unlock nodes for stream ${streamId}:`, error);
+      this.errorHandler.handleError(error, `StateManager.deleteEntry.unlockNodes[${streamId}]`);
       throw error;
     }
 

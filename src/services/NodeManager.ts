@@ -154,7 +154,7 @@ export class NodeManager {
           await this.unlockNode(node.port, force);
           this.logger.info(`${force ? 'Force ' : ''}unlocked node ${node.port} for stream ${streamId}`);
         } catch (error) {
-          this.logger.error(`Failed to unlock node ${node.port}:`, error);
+          this.errorHandler.handleError(error, `NodeManager.unlockStreamNodes.unlockNode[${node.port}]`);
           // Continue with other nodes even if one fails
         }
       }

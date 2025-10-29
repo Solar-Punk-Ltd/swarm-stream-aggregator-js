@@ -239,7 +239,7 @@ export class SwarmAggregator {
       this.isInitialized = false;
       this.logger.info('SwarmAggregator cleanup completed');
     } catch (error) {
-      this.logger.error('Error during SwarmAggregator cleanup:', error);
+      this.errorHandler.handleError(error, 'SwarmAggregator.cleanup');
       throw error;
     }
   }
