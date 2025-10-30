@@ -62,11 +62,14 @@ export class WakuHandler {
   private isShuttingDown = false;
   private recoveryTimeouts: NodeJS.Timeout[] = [];
   private cleanupTimeouts: NodeJS.Timeout[] = [];
+  private periodicRestartTimer: NodeJS.Timeout | null = null;
+  private isPeriodicRestart = false;
 
   private static readonly RECOVERY_DELAY_MINIMAL = 8000;
   private static readonly RECOVERY_DELAY_UNHEALTHY = 10000;
   private static readonly RECOVERY_DELAY_RETRY = 20000;
   private static readonly NODE_RESTART_DELAY = 2000;
+  private static readonly PERIODIC_RESTART_INTERVAL = 2 * 60 * 60 * 1000; // 2 hours
 
   constructor(streamKey: string, streamTopic: string) {
     const streamOwner = new PrivateKey(streamKey).publicKey().address().toHex().toLocaleLowerCase();
@@ -76,6 +79,7 @@ export class WakuHandler {
   public async init(): Promise<void> {
     this.createProtobufSchema();
     await this.initializeWakuNode();
+    this.schedulePeriodicRestart();
     this.logger.info('WakuHandler initialized with reliable channel');
   }
 
@@ -361,6 +365,53 @@ export class WakuHandler {
     }
   }
 
+  private schedulePeriodicRestart(): void {
+    if (this.periodicRestartTimer) {
+      clearTimeout(this.periodicRestartTimer);
+    }
+
+    this.periodicRestartTimer = setTimeout(async () => {
+      if (this.isShuttingDown) {
+        return;
+      }
+
+      this.logger.info('Scheduled periodic Waku node restart (2-hour maintenance)');
+      await this.performPeriodicRestart();
+    }, WakuHandler.PERIODIC_RESTART_INTERVAL);
+  }
+
+  private async performPeriodicRestart(): Promise<void> {
+    try {
+      this.isPeriodicRestart = true;
+      this.logger.info('Starting periodic Waku node restart...');
+
+      this.messageTrackers.clear();
+      this.logger.info('Cleared message trackers for clean restart');
+
+      await this.cleanupNodeAndChannel();
+      await sleep(WakuHandler.NODE_RESTART_DELAY);
+
+      if (this.isShuttingDown) {
+        this.logger.info('Skipping node recreation - shutdown in progress');
+        return;
+      }
+
+      await this.initializeWakuNode();
+      this.logger.info('Periodic Waku node restart completed successfully');
+
+      this.schedulePeriodicRestart();
+    } catch (error) {
+      this.errorHandler.handleError(error, 'WakuHandler.performPeriodicRestart');
+      this.logger.error('Failed to complete periodic restart, will retry in 5 minutes');
+
+      this.periodicRestartTimer = setTimeout(async () => {
+        await this.performPeriodicRestart();
+      }, 5 * 60 * 1000);
+    } finally {
+      this.isPeriodicRestart = false;
+    }
+  }
+
   public async sendStreamList(streamList: StateArrayWithTimestamp): Promise<{
     success: boolean;
     messageId: string;
@@ -368,6 +419,17 @@ export class WakuHandler {
     timestamp: number;
     status: string;
   }> {
+    if (this.isPeriodicRestart) {
+      this.logger.debug('Skipping Waku send during periodic restart');
+      return {
+        success: false,
+        messageId: '',
+        entriesCount: streamList.entries.length,
+        timestamp: Date.now(),
+        status: 'skipped_restart',
+      };
+    }
+
     if (!this.reliableChannel || !this.streamListType) {
       throw new Error('WakuHandler not initialized');
     }
@@ -421,6 +483,12 @@ export class WakuHandler {
     this.isShuttingDown = true;
 
     this.logger.info('Starting WakuHandler cleanup...');
+
+    if (this.periodicRestartTimer) {
+      clearTimeout(this.periodicRestartTimer);
+      this.periodicRestartTimer = null;
+      this.logger.info('Periodic restart timer cleared');
+    }
 
     this.recoveryTimeouts.forEach(clearTimeout);
     this.recoveryTimeouts = [];

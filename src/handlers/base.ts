@@ -1,3 +1,4 @@
+import { ErrorHandler } from '../libs/error.js';
 import { Logger } from '../libs/logger.js';
 import { StateManager } from '../services/StateManager.js';
 import { StateArrayWithTimestamp } from '../types.js';
@@ -5,6 +6,7 @@ import { StateArrayWithTimestamp } from '../types.js';
 import { HandlerContext, ProcessResult } from './types.js';
 
 export abstract class BaseHandler {
+  protected errorHandler = ErrorHandler.getInstance();
   protected logger = Logger.getInstance();
   protected stateManager: StateManager;
 
@@ -26,7 +28,7 @@ export abstract class BaseHandler {
         state,
       };
     } catch (error) {
-      this.logger.error(`Handler error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      this.errorHandler.handleError(error, 'BaseHandler.handle');
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error',

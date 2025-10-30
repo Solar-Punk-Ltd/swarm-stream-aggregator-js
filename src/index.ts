@@ -91,7 +91,7 @@ async function main() {
 
       logger.info('Graceful shutdown completed');
     } catch (error) {
-      logger.error('Error during shutdown:', error);
+      errorHandler.handleError(error, 'shutdown');
     }
   }
 

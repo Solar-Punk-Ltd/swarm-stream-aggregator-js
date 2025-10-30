@@ -5,6 +5,7 @@ import { CreateHandler } from '../handlers/create.js';
 import { DeleteHandler } from '../handlers/delete.js';
 import { ProcessResult } from '../handlers/types.js';
 import { UpdateHandler } from '../handlers/update.js';
+import { ErrorHandler } from '../libs/error.js';
 import { Logger } from '../libs/logger.js';
 import { ActionType, Message, StateArrayWithTimestamp } from '../types.js';
 
@@ -12,6 +13,7 @@ import { AuthService } from './AuthService.js';
 import { StateManager } from './StateManager.js';
 
 export class MessageProcessor {
+  private errorHandler = ErrorHandler.getInstance();
   private logger = Logger.getInstance();
   private authService: AuthService;
   private handlers: Map<ActionType, BaseHandler>;
@@ -54,12 +56,12 @@ export class MessageProcessor {
       if (result.success) {
         this.logger.info(`Successfully processed ${actionType} action`);
       } else {
-        this.logger.error(`Failed to process ${actionType} action: ${result.error}`);
+        this.errorHandler.handleError(result.error, `MessageProcessor.processMessage[${actionType}]`);
       }
 
       return result;
     } catch (error) {
-      this.logger.error(`Message processing error: ${error instanceof Error ? error.message : 'Unknown'}`);
+      this.errorHandler.handleError(error, 'MessageProcessor.processMessage');
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error',

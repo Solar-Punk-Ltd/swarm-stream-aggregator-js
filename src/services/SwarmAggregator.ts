@@ -141,7 +141,7 @@ export class SwarmAggregator {
       );
 
       if (!result.success) {
-        this.logger.error(`Failed to process message: ${result.error}`);
+        this.errorHandler.handleError(result.error, 'SwarmAggregator.gsocCallback');
         return;
       }
 
