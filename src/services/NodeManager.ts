@@ -19,6 +19,12 @@ interface StampInfo {
     type: NodeType;
     pinned: boolean;
   };
+  history?: {
+    stream_id: string;
+    type: NodeType;
+    unlocked_at: number;
+    was_pinned: boolean;
+  };
 }
 
 interface PrivateWriterNode {
@@ -96,9 +102,19 @@ export class NodeManager {
   private findStreamStamps(
     status: StatusResponse,
     streamId: string,
-  ): Array<{ port: string; stamp: string; lock_info?: any }> {
+  ): Array<{
+    port: string;
+    stamp: string;
+    lock_info?: StampInfo['lock_info'];
+    history?: StampInfo['history'];
+  }> {
     const normalizedStreamId = streamId.toLowerCase();
-    const streamStamps: Array<{ port: string; stamp: string; lock_info?: any }> = [];
+    const streamStamps: Array<{
+      port: string;
+      stamp: string;
+      lock_info?: StampInfo['lock_info'];
+      history?: StampInfo['history'];
+    }> = [];
 
     for (const node of status.nodes.private_writers) {
       for (const stampInfo of node.stamps) {
@@ -107,6 +123,12 @@ export class NodeManager {
             port: node.port,
             stamp: stampInfo.stamp,
             lock_info: stampInfo.lock_info,
+          });
+        } else if (stampInfo.history?.stream_id?.toLowerCase() === normalizedStreamId) {
+          streamStamps.push({
+            port: node.port,
+            stamp: stampInfo.stamp,
+            history: stampInfo.history,
           });
         }
       }
@@ -123,15 +145,36 @@ export class NodeManager {
       const streamStamps = this.findStreamStamps(status, streamId);
 
       if (streamStamps.length === 0) {
-        throw new Error(`No locked stamps found for stream ID: ${streamId}`);
+        throw new Error(`No stamps found for stream ID: ${streamId}`);
       }
 
-      this.logger.info(`Setting stream ${streamId} to ${pinned ? 'pinned' : 'unpinned'}`);
+      this.logger.info(
+        `Setting stream ${streamId} to ${pinned ? 'pinned' : 'unpinned'} (${streamStamps.length} stamp(s))`,
+      );
 
       const results: LockResult[] = [];
 
-      for (const { port, stamp, lock_info } of streamStamps) {
-        if (lock_info.pinned === pinned) {
+      // Defensive: Only pin first media and first chat stamp
+      // Check both locked stamps and history
+      const mediaStamp = streamStamps.find(
+        s => s.lock_info?.type === NodeType.MEDIA || s.history?.type === NodeType.MEDIA,
+      );
+      const chatStamp = streamStamps.find(
+        s => s.lock_info?.type === NodeType.CHAT || s.history?.type === NodeType.CHAT,
+      );
+
+      const stampsToPin = [mediaStamp, chatStamp].filter(
+        (s): s is NonNullable<typeof s> => s !== undefined && s !== null,
+      );
+
+      if (stampsToPin.length === 0) {
+        throw new Error(`No media/chat stamps found for stream ${streamId}`);
+      }
+
+      for (const { port, stamp, lock_info, history } of stampsToPin) {
+        const currentPinned = lock_info?.pinned ?? history?.was_pinned ?? false;
+
+        if (currentPinned === pinned) {
           this.logger.debug(
             `Stamp ${stamp} on port ${port} already has correct pin state: ${pinned ? 'pinned' : 'unpinned'}`,
           );
@@ -171,14 +214,17 @@ export class NodeManager {
 
       const stampInfo = stamp ? ` stamp ${stamp}` : '';
       this.logger.info(`Unlocked${stampInfo} on port ${port}`);
-    } catch (error: any) {
-      if (error.response?.status === 423) {
-        const stampInfo = stamp ? ` stamp ${stamp}` : '';
-        throw new Error(`Port ${port}${stampInfo} is pinned - use force to unlock`);
-      }
-      if (error.response?.status === 404) {
-        const stampInfo = stamp ? ` stamp ${stamp}` : '';
-        throw new Error(`Port ${port}${stampInfo} is not locked`);
+    } catch (error: unknown) {
+      if (error && typeof error === 'object' && 'response' in error) {
+        const axiosError = error as { response?: { status?: number } };
+        if (axiosError.response?.status === 423) {
+          const stampInfo = stamp ? ` stamp ${stamp}` : '';
+          throw new Error(`Port ${port}${stampInfo} is pinned - use force to unlock`);
+        }
+        if (axiosError.response?.status === 404) {
+          const stampInfo = stamp ? ` stamp ${stamp}` : '';
+          throw new Error(`Port ${port}${stampInfo} is not locked`);
+        }
       }
       this.errorHandler.handleError(error, 'NodeManager.unlockNode');
       throw error;
