@@ -8,9 +8,8 @@ export enum NodeType {
   CHAT = 'chat',
 }
 
-interface NodeInfo {
-  port: string;
-  hash: string;
+interface StampInfo {
+  stamp: string;
   locked: boolean;
   lock_info?: {
     locked_at: number;
@@ -22,23 +21,52 @@ interface NodeInfo {
   };
 }
 
+interface PrivateWriterNode {
+  port: string;
+  total_stamps: number;
+  stamps: StampInfo[];
+}
+
+interface PublicWriterNode {
+  port: string;
+  hash: string;
+}
+
+interface ReaderNode {
+  status: string;
+  port: number;
+}
+
 interface StatusResponse {
   nodes: {
-    private_writers: NodeInfo[];
-    public_writers: NodeInfo[];
-    readers: any[];
+    private_writers: PrivateWriterNode[];
+    public_writers: PublicWriterNode[];
+    readers: ReaderNode[];
   };
   summary: {
     total_private_writers: number;
+    total_private_writer_stamps: number;
     locked_private_writers: number;
+    locked_private_writer_stamps: number;
     pinned_private_writers: number;
+    pinned_private_writer_stamps: number;
     available_private_writers: number;
+    available_private_writer_stamps: number;
+    total_public_writers: number;
+    total_readers: number;
+  };
+  instance: string;
+  persistence: {
+    file: string;
+    file_info: {
+      exists: boolean;
+    };
   };
 }
 
 interface LockResult {
   port: string;
-  hash: string;
+  stamp: string;
   lockData: {
     locked_at: number;
     locked_by: string;
@@ -65,48 +93,64 @@ export class NodeManager {
     });
   }
 
+  private findStreamStamps(
+    status: StatusResponse,
+    streamId: string,
+  ): Array<{ port: string; stamp: string; lock_info?: any }> {
+    const normalizedStreamId = streamId.toLowerCase();
+    const streamStamps: Array<{ port: string; stamp: string; lock_info?: any }> = [];
+
+    for (const node of status.nodes.private_writers) {
+      for (const stampInfo of node.stamps) {
+        if (stampInfo.lock_info?.stream_id?.toLowerCase() === normalizedStreamId) {
+          streamStamps.push({
+            port: node.port,
+            stamp: stampInfo.stamp,
+            lock_info: stampInfo.lock_info,
+          });
+        }
+      }
+    }
+
+    return streamStamps;
+  }
+
   public async toggleStreamPin(streamId: string, pinned: boolean): Promise<LockResult[]> {
     try {
       const statusResponse = await this.axios.get('/admin/node/status');
       const status = statusResponse.data as StatusResponse;
 
-      const normalizedStreamId = streamId.toLowerCase();
-      const streamNodes = status.nodes.private_writers.filter(
-        node => node.lock_info?.stream_id?.toLowerCase() === normalizedStreamId,
-      );
+      const streamStamps = this.findStreamStamps(status, streamId);
 
-      if (streamNodes.length === 0) {
-        throw new Error(`No locked nodes found for stream ID: ${streamId}`);
+      if (streamStamps.length === 0) {
+        throw new Error(`No locked stamps found for stream ID: ${streamId}`);
       }
 
       this.logger.info(`Setting stream ${streamId} to ${pinned ? 'pinned' : 'unpinned'}`);
 
       const results: LockResult[] = [];
 
-      for (const node of streamNodes) {
-        const { port, lock_info } = node;
-
-        if (!lock_info) {
-          continue;
-        }
-
+      for (const { port, stamp, lock_info } of streamStamps) {
         if (lock_info.pinned === pinned) {
-          this.logger.debug(`Node ${port} already has correct pin state: ${pinned ? 'pinned' : 'unpinned'}`);
+          this.logger.debug(
+            `Stamp ${stamp} on port ${port} already has correct pin state: ${pinned ? 'pinned' : 'unpinned'}`,
+          );
           continue;
         }
 
         const pinResponse = await this.axios.post('/admin/node/pin', {
           port,
+          stamp,
           pinned,
         });
 
         results.push({
           port,
-          hash: node.hash,
+          stamp,
           lockData: pinResponse.data.lock_data,
         });
 
-        this.logger.info(`${pinned ? 'Pinned' : 'Unpinned'} node ${port} for stream ${streamId}`);
+        this.logger.info(`${pinned ? 'Pinned' : 'Unpinned'} stamp ${stamp} on port ${port} for stream ${streamId}`);
       }
 
       return results;
@@ -116,16 +160,25 @@ export class NodeManager {
     }
   }
 
-  public async unlockNode(port: string, force = false): Promise<void> {
+  public async unlockNode(port: string, stamp?: string, force = false): Promise<void> {
     try {
-      await this.axios.post('/admin/node/unlock', { port, force });
-      this.logger.info(`Unlocked node ${port}`);
+      const payload: { port: string; stamp?: string; force: boolean } = { port, force };
+      if (stamp) {
+        payload.stamp = stamp;
+      }
+
+      await this.axios.post('/admin/node/unlock', payload);
+
+      const stampInfo = stamp ? ` stamp ${stamp}` : '';
+      this.logger.info(`Unlocked${stampInfo} on port ${port}`);
     } catch (error: any) {
       if (error.response?.status === 423) {
-        throw new Error(`Node ${port} is pinned - use force to unlock`);
+        const stampInfo = stamp ? ` stamp ${stamp}` : '';
+        throw new Error(`Port ${port}${stampInfo} is pinned - use force to unlock`);
       }
       if (error.response?.status === 404) {
-        throw new Error(`Node ${port} is not locked`);
+        const stampInfo = stamp ? ` stamp ${stamp}` : '';
+        throw new Error(`Port ${port}${stampInfo} is not locked`);
       }
       this.errorHandler.handleError(error, 'NodeManager.unlockNode');
       throw error;
@@ -137,25 +190,22 @@ export class NodeManager {
       const statusResponse = await this.axios.get('/admin/node/status');
       const status = statusResponse.data as StatusResponse;
 
-      const normalizedStreamId = streamId.toLowerCase();
-      const streamNodes = status.nodes.private_writers.filter(
-        node => node.lock_info?.stream_id?.toLowerCase() === normalizedStreamId,
-      );
+      const streamStamps = this.findStreamStamps(status, streamId);
 
-      if (streamNodes.length === 0) {
-        this.logger.info(`No nodes found for stream ${streamId} - nothing to unlock`);
+      if (streamStamps.length === 0) {
+        this.logger.info(`No stamps found for stream ${streamId} - nothing to unlock`);
         return;
       }
 
-      this.logger.info(`Unlocking ${streamNodes.length} nodes for stream ${streamId}`);
+      this.logger.info(`Unlocking ${streamStamps.length} stamps for stream ${streamId}`);
 
-      for (const node of streamNodes) {
+      for (const { port, stamp } of streamStamps) {
         try {
-          await this.unlockNode(node.port, force);
-          this.logger.info(`${force ? 'Force ' : ''}unlocked node ${node.port} for stream ${streamId}`);
+          await this.unlockNode(port, stamp, force);
+          this.logger.info(`${force ? 'Force ' : ''}unlocked stamp ${stamp} on port ${port} for stream ${streamId}`);
         } catch (error) {
-          this.errorHandler.handleError(error, `NodeManager.unlockStreamNodes.unlockNode[${node.port}]`);
-          // Continue with other nodes even if one fails
+          this.errorHandler.handleError(error, `NodeManager.unlockStreamNodes.unlockNode[${port}:${stamp}]`);
+          // Continue with other stamps even if one fails
         }
       }
     } catch (error) {
