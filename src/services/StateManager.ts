@@ -86,13 +86,17 @@ export class StateManager {
     }
 
     const streamId = `${owner}/${topic}`;
-    this.logger.info(`Deleting entry ${streamId} - force unlocking associated nodes`);
 
-    try {
-      await this.unlockStreamNodes(streamId);
-    } catch (error) {
-      this.errorHandler.handleError(error, `StateManager.deleteEntry.unlockNodes[${streamId}]`);
-      throw error;
+    if (entryToDelete.pinned) {
+      this.logger.info(`Deleting entry ${streamId} - unpinning first`);
+      try {
+        await this.nodeManager.toggleStreamPin(streamId, false);
+      } catch (error) {
+        this.errorHandler.handleError(error, `StateManager.deleteEntry.unpinNodes[${streamId}]`);
+        throw error;
+      }
+    } else {
+      this.logger.info(`Deleting entry ${streamId}`);
     }
 
     const filtered = entries.filter(entry => !(entry.owner === owner && entry.topic === topic));
@@ -144,10 +148,6 @@ export class StateManager {
     unpinnedEntries.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
 
     return [...pinnedEntries, ...unpinnedEntries];
-  }
-
-  private async unlockStreamNodes(streamId: string): Promise<void> {
-    await this.nodeManager.unlockStreamNodes(streamId, true);
   }
 
   public createStateArrayWithTimestamp(entries: StateEntry[]): StateArrayWithTimestamp {
