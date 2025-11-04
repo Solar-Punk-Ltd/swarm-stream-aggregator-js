@@ -51,6 +51,8 @@ export interface StateEntry {
   description?: string;
   scheduledStartTime?: string;
   pinned?: boolean;
+  tags?: string[];
+  isExternal?: boolean;
   nodes: {
     media: NodeInfo;
     chat: NodeInfo;

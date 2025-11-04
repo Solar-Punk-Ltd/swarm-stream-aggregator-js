@@ -1,6 +1,7 @@
 import { ErrorHandler } from '../libs/error.js';
 import { Logger } from '../libs/logger.js';
 import { StateArrayWithTimestamp, StateEntry } from '../types.js';
+import { matchesEntry } from '../utils/common.js';
 
 import { NodeManager } from './NodeManager.js';
 
@@ -13,7 +14,7 @@ export class StateManager {
 
   public createEntry(state: StateArrayWithTimestamp, newEntry: StateEntry): StateArrayWithTimestamp {
     const entries = state.entries;
-    const duplicate = entries.find(entry => entry.owner === newEntry.owner && entry.topic === newEntry.topic);
+    const duplicate = entries.find(entry => matchesEntry(entry, newEntry.owner, newEntry.topic));
 
     if (duplicate) {
       throw new Error(`Entry already exists with id: ${`${newEntry.owner}:${newEntry.topic}`}`);
@@ -24,6 +25,11 @@ export class StateManager {
       createdAt: Date.now(),
       updatedAt: Date.now(),
     };
+
+    if (newEntry.isExternal) {
+      this.logger.info(`Adding external entry: ${newEntry.owner}/${newEntry.topic} (bypassing size limit)`);
+      return this.createStateArrayWithTimestamp(this.sortStateWithPinnedPriority([...entries, entryWithTimestamps]));
+    }
 
     if (entries.length >= this.maxStateSize) {
       this.logger.warn('State size limit reached (5 entries), removing oldest entry');
@@ -42,7 +48,7 @@ export class StateManager {
     updates: Partial<StateEntry>,
   ): Promise<StateArrayWithTimestamp> {
     const entries = state.entries;
-    const index = entries.findIndex(entry => entry.owner === updates.owner && entry.topic === updates.topic);
+    const index = entries.findIndex(entry => matchesEntry(entry, updates.owner!, updates.topic!));
 
     if (index === -1) {
       throw new Error(`Entry not found with id: ${`${updates.owner}:${updates.topic}`}`);
@@ -79,7 +85,7 @@ export class StateManager {
     topic: string,
   ): Promise<StateArrayWithTimestamp> {
     const entries = state.entries;
-    const entryToDelete = entries.find(entry => entry.owner === owner && entry.topic === topic);
+    const entryToDelete = entries.find(entry => matchesEntry(entry, owner, topic));
 
     if (!entryToDelete) {
       throw new Error(`Entry not found with id: ${`${owner}:${topic}`}`);
@@ -99,13 +105,13 @@ export class StateManager {
       this.logger.info(`Deleting entry ${streamId}`);
     }
 
-    const filtered = entries.filter(entry => !(entry.owner === owner && entry.topic === topic));
+    const filtered = entries.filter(entry => !matchesEntry(entry, owner, topic));
     return this.createStateArrayWithTimestamp(filtered);
   }
 
   public findEntry(state: StateArrayWithTimestamp, owner: string, topic: string): StateEntry | undefined {
     const entries = state.entries;
-    return entries.find(entry => entry.owner === owner && entry.topic === topic);
+    return entries.find(entry => matchesEntry(entry, owner, topic));
   }
 
   public validateEntry(entry: StateEntry): boolean {
@@ -137,7 +143,7 @@ export class StateManager {
     const streamId = `${oldestUnpinned.owner}/${oldestUnpinned.topic}`;
     this.logger.info(`Removing oldest unpinned entry: ${streamId}`);
 
-    return state.filter(entry => !(entry.owner === oldestUnpinned.owner && entry.topic === oldestUnpinned.topic));
+    return state.filter(entry => !matchesEntry(entry, oldestUnpinned.owner, oldestUnpinned.topic));
   }
 
   private sortStateWithPinnedPriority(state: StateEntry[]): StateEntry[] {

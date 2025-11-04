@@ -33,3 +33,14 @@ export function getOptionalEnvVariable(name: string): string | undefined {
 export function getEnvVariableWithDefault(name: string, defaultValue: string): string {
   return process.env[name] || defaultValue;
 }
+
+export function normalizeIdentifier(value: string): string {
+  return value.toLowerCase().trim();
+}
+
+export function matchesEntry(entry: { owner: string; topic: string }, owner: string, topic: string): boolean {
+  return (
+    normalizeIdentifier(entry.owner) === normalizeIdentifier(owner) &&
+    normalizeIdentifier(entry.topic) === normalizeIdentifier(topic)
+  );
+}
