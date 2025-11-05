@@ -31,8 +31,11 @@ export class StateManager {
       return this.createStateArrayWithTimestamp(this.sortStateWithPinnedPriority([...entries, entryWithTimestamps]));
     }
 
-    if (entries.length >= this.maxStateSize) {
-      this.logger.warn('State size limit reached (5 entries), removing oldest entry');
+    const nonExternalEntries = entries.filter(entry => !entry.isExternal);
+    if (nonExternalEntries.length >= this.maxStateSize) {
+      this.logger.warn(
+        `Non-external entry limit reached (${this.maxStateSize} entries), removing oldest unpinned non-external entry`,
+      );
       const updatedState = this.removeOldestUnpinnedEntry(entries);
 
       return this.createStateArrayWithTimestamp(
@@ -125,23 +128,33 @@ export class StateManager {
   }
 
   private removeOldestUnpinnedEntry(state: StateEntry[]): StateEntry[] {
-    const unpinnedEntries = state.filter(entry => !entry.pinned);
+    const unpinnedNonExternalEntries = state.filter(entry => !entry.pinned && !entry.isExternal);
 
-    if (unpinnedEntries.length === 0) {
-      const pinnedStreams = state.map(entry => `${entry.owner}/${entry.topic}`).join(', ');
+    if (unpinnedNonExternalEntries.length === 0) {
+      const pinnedStreams = state
+        .filter(entry => entry.pinned)
+        .map(entry => `${entry.owner}/${entry.topic}`)
+        .join(', ');
+      const externalStreams = state
+        .filter(entry => entry.isExternal)
+        .map(entry => `${entry.owner}/${entry.topic}`)
+        .join(', ');
+
       throw new Error(
-        `Cannot add new entry: all ${state.length} existing entries are pinned (${pinnedStreams}). Please unpin some streams or increase the max state size.`,
+        `Cannot add new entry: no unpinned non-external entries available for removal. ` +
+          `Pinned: [${pinnedStreams}], External: [${externalStreams}]. ` +
+          `Please unpin some streams or increase the max state size.`,
       );
     }
 
-    const oldestUnpinned = unpinnedEntries.reduce((oldest, current) => {
+    const oldestUnpinned = unpinnedNonExternalEntries.reduce((oldest, current) => {
       const oldestTime = oldest.updatedAt || oldest.createdAt || 0;
       const currentTime = current.updatedAt || current.createdAt || 0;
       return currentTime < oldestTime ? current : oldest;
     });
 
     const streamId = `${oldestUnpinned.owner}/${oldestUnpinned.topic}`;
-    this.logger.info(`Removing oldest unpinned entry: ${streamId}`);
+    this.logger.info(`Removing oldest unpinned non-external entry: ${streamId}`);
 
     return state.filter(entry => !matchesEntry(entry, oldestUnpinned.owner, oldestUnpinned.topic));
   }
@@ -150,8 +163,15 @@ export class StateManager {
     const pinnedEntries = state.filter(entry => entry.pinned);
     const unpinnedEntries = state.filter(entry => !entry.pinned);
 
-    pinnedEntries.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
-    unpinnedEntries.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+    const sortByExternalAndUpdatedAt = (a: StateEntry, b: StateEntry) => {
+      if (a.isExternal !== b.isExternal) {
+        return a.isExternal ? 1 : -1;
+      }
+      return (b.updatedAt || 0) - (a.updatedAt || 0);
+    };
+
+    pinnedEntries.sort(sortByExternalAndUpdatedAt);
+    unpinnedEntries.sort(sortByExternalAndUpdatedAt);
 
     return [...pinnedEntries, ...unpinnedEntries];
   }
