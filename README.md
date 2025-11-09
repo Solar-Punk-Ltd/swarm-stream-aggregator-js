@@ -48,7 +48,7 @@ The server requires the following environment variables to be set:
 
 1.  **Clone the repository:**
     ```bash
-    git clone git@github.com:Solar-Punk-Ltd/swarm-stream-aggregator-js.git
+    git clone https://github.com/Solar-Punk-Ltd/swarm-stream-aggregator-js.git
     cd swarm-stream-aggregator-js
     ```
 2.  **Install dependencies:**
