@@ -4,7 +4,7 @@ import PQueue from 'p-queue';
 import { ErrorHandler } from '../libs/error.js';
 import { Logger } from '../libs/logger.js';
 import { StateArrayWithTimestamp } from '../types.js';
-import { getEnvVariable } from '../utils/common.js';
+import { getBooleanEnvVariable, getEnvVariable } from '../utils/common.js';
 
 import { AuthService } from './AuthService.js';
 import { MessageProcessor } from './MessageProcessor.js';
@@ -24,6 +24,7 @@ const STREAM_STAMP = getEnvVariable('STREAM_STAMP');
 const API_KEY = getEnvVariable('API_KEY');
 const REQUIRE_AUTH = getEnvVariable('REQUIRE_AUTH') === 'true';
 const NGINX_ADMIN_SECRET = getEnvVariable('NGINX_ADMIN_SECRET');
+const IS_WAKU_ENABLED = getBooleanEnvVariable('IS_WAKU_ENABLED', true);
 
 // MSRS gateway specific settings
 const GATEWAY_URL = new URL(STREAM_BEE_URL).origin;
@@ -43,7 +44,7 @@ export class SwarmAggregator {
   private stateManager: StateManager;
   private messageProcessor: MessageProcessor;
   private nodeManager: NodeManager;
-  private wakuHandler: WakuHandler;
+  private wakuHandler: WakuHandler | null = null;
 
   private messageCache = new Map<string, null>();
   private readonly maxCacheSize = 50_000;
@@ -70,7 +71,6 @@ export class SwarmAggregator {
     this.nodeManager = new NodeManager(GATEWAY_URL, NGINX_ADMIN_SECRET);
     this.stateManager = new StateManager(this.nodeManager);
     this.messageProcessor = new MessageProcessor(this.authService, this.stateManager);
-    this.wakuHandler = new WakuHandler(STREAM_KEY, STREAM_TOPIC);
   }
 
   public async init() {
@@ -86,10 +86,11 @@ export class SwarmAggregator {
       this.logger.info('init topic:', topic.toHex());
       this.logger.info('init owner:', publicKey.toHex());
       this.logger.info(`init auth enabled: ${REQUIRE_AUTH}`);
+      this.logger.info(`init waku enabled: ${IS_WAKU_ENABLED}`);
 
       const feedReader = this.writerBee.makeFeedReader(topic, publicKey);
 
-      await this.wakuHandler.init();
+      await this.initializeWaku();
 
       const data = await feedReader.downloadPayload();
 
@@ -106,6 +107,22 @@ export class SwarmAggregator {
         this.errorHandler.handleError(error, 'SwarmAggregator.init');
         throw error;
       }
+    }
+  }
+
+  private async initializeWaku(): Promise<void> {
+    if (!IS_WAKU_ENABLED) {
+      this.logger.info('Waku is disabled, skipping initialization');
+      return;
+    }
+
+    try {
+      this.wakuHandler = new WakuHandler(STREAM_KEY, STREAM_TOPIC);
+      await this.wakuHandler.init();
+      this.logger.info('Waku handler initialized successfully');
+    } catch (error) {
+      this.errorHandler.handleError(error, 'SwarmAggregator.initializeWaku');
+      this.wakuHandler = null;
     }
   }
 
@@ -182,12 +199,17 @@ export class SwarmAggregator {
     const feedWriter = this.writerBee.makeFeedWriter(topic, this.streamSigner);
     const nextIndex = this.index ? this.index.next() : FeedIndex.fromBigInt(BigInt(0));
 
-    const [feedRes] = await Promise.all([
+    const promises: Promise<any>[] = [
       feedWriter.uploadPayload(STREAM_STAMP, JSON.stringify(state), {
         index: nextIndex,
       }),
-      this.wakuHandler.sendStreamList(state),
-    ]);
+    ];
+
+    if (this.wakuHandler) {
+      promises.push(this.wakuHandler.sendStreamList(state));
+    }
+
+    const [feedRes] = await Promise.all(promises);
 
     this.logger.info(`Feed write result: ${feedRes.reference}, Index: ${nextIndex.toString()}`);
     this.index = nextIndex;
@@ -234,7 +256,15 @@ export class SwarmAggregator {
 
       this.messageCache.clear();
 
-      await this.wakuHandler.cleanup();
+      if (this.wakuHandler) {
+        try {
+          await this.wakuHandler.cleanup();
+          this.logger.info('Waku handler cleaned up successfully');
+        } catch (error) {
+          this.errorHandler.handleError(error, 'SwarmAggregator.cleanup.waku');
+        }
+        this.wakuHandler = null;
+      }
 
       this.isInitialized = false;
       this.logger.info('SwarmAggregator cleanup completed');

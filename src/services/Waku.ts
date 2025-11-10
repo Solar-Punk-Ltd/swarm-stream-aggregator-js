@@ -6,9 +6,9 @@ import protobuf from 'protobufjs';
 import { ErrorHandler } from '../libs/error.js';
 import { Logger } from '../libs/logger.js';
 import { StateArrayWithTimestamp } from '../types.js';
-import { getEnvVariable, getShortMessageId, sleep } from '../utils/common.js';
+import { getEnvVariableWithDefault, getShortMessageId, sleep } from '../utils/common.js';
 
-const WAKU_STATIC_PEER = getEnvVariable('WAKU_STATIC_PEER');
+const WAKU_STATIC_PEER = getEnvVariableWithDefault('WAKU_STATIC_PEER', '');
 
 export enum MessageStatus {
   Sending = 'sending',
@@ -86,6 +86,10 @@ export class WakuHandler {
   private async initializeWakuNode(): Promise<void> {
     if (this.contentTopic === null) {
       throw new Error('Content topic is null');
+    }
+
+    if (!WAKU_STATIC_PEER) {
+      throw new Error('WAKU_STATIC_PEER environment variable is required when Waku is enabled');
     }
 
     await this.cleanupNodeAndChannel();
