@@ -1,15 +1,16 @@
-name: Build and Deploy Prod ENV to VPS (PM2)
+name: Build and Deploy to VPS (PM2)
 
 on:
   push:
     branches:
       - prod
+      - test
   workflow_dispatch:
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
-    environment: Prod
+    environment: ${{ github.ref_name == 'prod' && 'Prod' || 'Test' }}
 
     steps:
       - name: Checkout code
