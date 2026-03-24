@@ -1,7 +1,7 @@
 # Example swarm stream GSOC Aggregator Server 🐝
 
 This project provides an example implementation of a GSOC aggregator server designed to work with
-[Solar-Punk-Ltd/mssd-ingestion](https://github.com/Solar-Punk-Ltd/mssd-ingestion).
+[Solar-Punk-Ltd/mssd-ingestion](https://github.com/Solar-Punk-Ltd/mssd-ingestion)
 
 The primary function of this server is to receive messages sent by the ingestion server via GSOC and consolidate them
 into a more persistent, access-controlled Swarm feed (the "stream feed" or "app feed). This feed has information about
