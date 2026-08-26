@@ -19,6 +19,7 @@ operations, and manages stream metadata in a decentralized manner.
 2. **MessageProcessor**: Routes messages to appropriate handlers based on action type
 3. **StateManager**: Manages stream state with CRUD operations and validation
 4. **SwarmAggregator**: Main orchestrator handling GSOC subscription and feed writing
+5. **LiveJanitor**: Periodic sweep that retires entries left stuck on `live` by a lost producer update
 
 ### Message Flow
 
@@ -66,21 +67,37 @@ Modifies existing stream metadata while preserving creation timestamp
 
 Removes a stream from the state
 
+## 🧹 Stale Live Janitor
+
+A producer normally ends a stream by sending an UPDATE that moves the entry from `live` to `vod`. When that message is
+lost, the entry stays `live` forever and clients keep showing a dead LIVE banner. The janitor closes that gap.
+
+Every `JANITOR_INTERVAL_MS` it reads the current state and, for each `live` entry, downloads the latest update of that
+stream's manifest feed. A playlist carrying the `#EXT-X-ENDLIST` tag is definitively finished, so the entry is switched
+to `vod` with `index` set to the manifest feed's latest index and `duration` set to the sum of its `#EXTINF` segment
+durations. Every healed entry produces one info log line naming the title, topic, index and duration.
+
+Anything else is left alone: a playlist without `#EXT-X-ENDLIST` belongs to a genuinely live stream, a manifest that
+cannot be read yet is retried on the next sweep, and entries that are not `live` are never inspected. The janitor never
+writes the feed itself, its mutations are queued behind the same serialized write path the GSOC messages use, so feed
+indexes cannot race.
+
 ## 🔧 Configuration
 
 ### Environment Variables
 
-| Variable           | Description                                    | Required |
-| :----------------- | :--------------------------------------------- | :------- |
-| `GSOC_BEE_URL`     | Bee node URL for GSOC subscription             | Yes      |
-| `GSOC_RESOURCE_ID` | Mined GSOC resource ID to monitor              | Yes      |
-| `GSOC_TOPIC`       | GSOC topic hash for subscription               | Yes      |
-| `STREAM_BEE_URL`   | Bee node URL for feed writing                  | Yes      |
-| `STREAM_TOPIC`     | Human-readable topic for stream feed           | Yes      |
-| `STREAM_KEY`       | Private key for signing feed updates           | Yes      |
-| `STREAM_STAMP`     | Postage stamp for Swarm uploads                | Yes      |
-| `API_KEY`          | Secret key for token decryption                | Yes      |
-| `REQUIRE_AUTH`     | Enable/disable authentication (`true`/`false`) | Yes      |
+| Variable              | Description                                                                  | Required |
+| :-------------------- | :--------------------------------------------------------------------------- | :------- |
+| `GSOC_BEE_URL`        | Bee node URL for GSOC subscription                                           | Yes      |
+| `GSOC_RESOURCE_ID`    | Mined GSOC resource ID to monitor                                            | Yes      |
+| `GSOC_TOPIC`          | GSOC topic hash for subscription                                             | Yes      |
+| `STREAM_BEE_URL`      | Bee node URL for feed writing                                                | Yes      |
+| `STREAM_TOPIC`        | Human-readable topic for stream feed                                         | Yes      |
+| `STREAM_KEY`          | Private key for signing feed updates                                         | Yes      |
+| `STREAM_STAMP`        | Postage stamp for Swarm uploads                                              | Yes      |
+| `API_KEY`             | Secret key for token decryption                                              | Yes      |
+| `REQUIRE_AUTH`        | Enable/disable authentication (`true`/`false`)                               | Yes      |
+| `JANITOR_INTERVAL_MS` | Janitor sweep interval in ms, defaults to `300000`, `0` or negative disables | No       |
 
 ### Example `.env` file
 

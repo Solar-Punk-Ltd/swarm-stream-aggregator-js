@@ -7,6 +7,7 @@ import { StateArrayWithTimestamp } from '../types.js';
 import { getBooleanEnvVariable, getEnvVariable } from '../utils/common.js';
 
 import { AuthService } from './AuthService.js';
+import { LiveJanitor, StateFeedAccess } from './LiveJanitor.js';
 import { MessageProcessor } from './MessageProcessor.js';
 import { NodeManager } from './NodeManager.js';
 import { StateManager } from './StateManager.js';
@@ -29,7 +30,7 @@ const IS_WAKU_ENABLED = getBooleanEnvVariable('IS_WAKU_ENABLED', true);
 // MSRS gateway specific settings
 const GATEWAY_URL = new URL(STREAM_BEE_URL).origin;
 
-export class SwarmAggregator {
+export class SwarmAggregator implements StateFeedAccess {
   private gsocBee: Bee;
   private writerBee: Bee;
   private streamSigner: PrivateKey;
@@ -44,6 +45,7 @@ export class SwarmAggregator {
   private stateManager: StateManager;
   private messageProcessor: MessageProcessor;
   private nodeManager: NodeManager;
+  private liveJanitor: LiveJanitor;
   private wakuHandler: WakuHandler | null = null;
 
   private messageCache = new Map<string, null>();
@@ -71,6 +73,7 @@ export class SwarmAggregator {
     this.nodeManager = new NodeManager(GATEWAY_URL, NGINX_ADMIN_SECRET);
     this.stateManager = new StateManager(this.nodeManager);
     this.messageProcessor = new MessageProcessor(this.authService, this.stateManager);
+    this.liveJanitor = new LiveJanitor(this.writerBee, this.stateManager, this);
   }
 
   public async init() {
@@ -140,6 +143,14 @@ export class SwarmAggregator {
     return gsocSub;
   }
 
+  public startLiveJanitor(): void {
+    this.liveJanitor.start();
+  }
+
+  public stopLiveJanitor(): void {
+    this.liveJanitor.stop();
+  }
+
   private async gsocCallback(message: Bytes) {
     try {
       if (!this.shouldProcessMessage(message)) {
@@ -192,6 +203,42 @@ export class SwarmAggregator {
       this.errorHandler.handleError(error, 'SwarmAggregator.fetchPreviousState');
       return null;
     }
+  }
+
+  public readState(): Promise<StateArrayWithTimestamp | null> {
+    return this.fetchPreviousState();
+  }
+
+  /**
+   * Runs a read-modify-write of the state feed on the same queue the GSOC messages use, so an
+   * out-of-band mutation cannot interleave with an incoming message and reuse a feed index.
+   * The callback returns null to leave the feed untouched. Resolves to true only when a new
+   * state was actually persisted.
+   */
+  public async commitSerialized(
+    mutate: (currentState: StateArrayWithTimestamp) => Promise<StateArrayWithTimestamp | null>,
+  ): Promise<boolean> {
+    const hasWritten = await this.queue.add(async () => {
+      try {
+        const previousState = await this.fetchPreviousState();
+        if (!previousState) {
+          return false;
+        }
+
+        const nextState = await mutate(previousState);
+        if (!nextState) {
+          return false;
+        }
+
+        await this.writeStateToFeed(nextState);
+        return true;
+      } catch (error) {
+        this.errorHandler.handleError(error, 'SwarmAggregator.commitSerialized');
+        return false;
+      }
+    });
+
+    return hasWritten === true;
   }
 
   private async writeStateToFeed(state: StateArrayWithTimestamp): Promise<void> {
@@ -251,6 +298,8 @@ export class SwarmAggregator {
     this.logger.info('Starting SwarmAggregator cleanup...');
 
     try {
+      this.liveJanitor.stop();
+
       this.queue.clear();
       await this.queue.onIdle();
 

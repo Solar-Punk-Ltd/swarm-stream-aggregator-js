@@ -86,6 +86,8 @@ async function main() {
         logger.info('[GSOC] Subscription cancelled');
       }
 
+      aggregator.stopLiveJanitor();
+
       await aggregator.cleanup();
       logger.info('[SwarmAggregator] Cleaned up');
 
@@ -98,6 +100,7 @@ async function main() {
   try {
     await aggregator.init();
     gsocSubscription = aggregator.subscribeToGsoc();
+    aggregator.startLiveJanitor();
     logger.info('[SwarmAggregator] Started');
   } catch (error) {
     errorHandler.handleError(error, 'main');

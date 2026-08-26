@@ -17,5 +17,5 @@
     "noEmit": false
   },
   "include": ["src/**/*"],
-  "exclude": ["**/*.js"]
+  "exclude": ["**/*.js", "**/*.test.ts"]
 }

@@ -26,6 +26,17 @@ export function getBooleanEnvVariable(name: string, defaultValue: boolean = fals
   return normalizedValue === 'true';
 }
 
+/** Falls back to the default when the variable is unset or not a finite number. */
+export function getNumberEnvVariable(name: string, defaultValue: number): number {
+  const value = process.env[name];
+  if (!value) {
+    return defaultValue;
+  }
+
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : defaultValue;
+}
+
 export function getOptionalEnvVariable(name: string): string | undefined {
   return process.env[name];
 }
