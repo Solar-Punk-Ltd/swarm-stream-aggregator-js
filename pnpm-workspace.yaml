@@ -4,7 +4,7 @@ packages:
 overrides:
   rollup: 4.62.4
 
-onlyBuiltDependencies:
-  - esbuild
-  - protobufjs
-  - unrs-resolver
+allowBuilds:
+  esbuild: true
+  protobufjs: true
+  unrs-resolver: true
