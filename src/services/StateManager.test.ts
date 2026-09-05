@@ -78,3 +78,27 @@ describe('StateManager entry limit', () => {
     expect(topicsOf(result)).not.toContain('s0');
   });
 });
+
+describe('StateManager timestamps on create', () => {
+  it('stamps now when the entry carries no timestamps', () => {
+    const stateManager = new StateManager(nodeManager);
+    const { createdAt: _c, updatedAt: _u, ...fresh } = buildEntry('fresh');
+    const before = Date.now();
+
+    const result = stateManager.createEntry(buildState([]), fresh as StateEntry);
+
+    const entry = result.entries[0];
+    expect(entry.createdAt).toBeGreaterThanOrEqual(before);
+    expect(entry.updatedAt).toBeGreaterThanOrEqual(before);
+  });
+
+  it('keeps supplied timestamps so a restored entry is not reported as new', () => {
+    const stateManager = new StateManager(nodeManager);
+    const restored = buildEntry('restored', { createdAt: 1_781_703_535_591, updatedAt: 1_781_766_190_226 });
+
+    const result = stateManager.createEntry(buildState([]), restored);
+
+    expect(result.entries[0].createdAt).toBe(1_781_703_535_591);
+    expect(result.entries[0].updatedAt).toBe(1_781_766_190_226);
+  });
+});

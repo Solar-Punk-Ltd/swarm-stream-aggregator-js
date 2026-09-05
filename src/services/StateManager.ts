@@ -30,10 +30,13 @@ export class StateManager {
       throw new Error(`Entry already exists with id: ${`${newEntry.owner}:${newEntry.topic}`}`);
     }
 
+    // Clients never send timestamps, so a supplied pair means a deliberate restore of an entry that
+    // was evicted, and it keeps its place in the history instead of surfacing as new.
+    const now = Date.now();
     const entryWithTimestamps = {
       ...newEntry,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
+      createdAt: newEntry.createdAt ?? now,
+      updatedAt: newEntry.updatedAt ?? now,
     };
 
     if (newEntry.isExternal) {
