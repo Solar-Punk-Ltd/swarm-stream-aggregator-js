@@ -1,14 +1,24 @@
 import { ErrorHandler } from '../libs/error.js';
 import { Logger } from '../libs/logger.js';
 import { StateArrayWithTimestamp, StateEntry } from '../types.js';
-import { matchesEntry } from '../utils/common.js';
+import { getNumberEnvVariable, matchesEntry } from '../utils/common.js';
 
 import { NodeManager } from './NodeManager.js';
+
+/**
+ * How many non-external entries the published list carries. External entries are exempt, so the
+ * list holds this many real streams plus however many evergreen external ones are configured.
+ *
+ * The whole list is written as one feed payload. Above 4096 bytes bee-js stores it as a wrapped
+ * chunk and Bee rejoins it on read, so this is a product decision about list length rather than a
+ * transport limit.
+ */
+const DEFAULT_MAX_STATE_SIZE = 10;
 
 export class StateManager {
   private logger = Logger.getInstance();
   private errorHandler = ErrorHandler.getInstance();
-  private readonly maxStateSize = 5;
+  private readonly maxStateSize = getNumberEnvVariable('MAX_STATE_SIZE', DEFAULT_MAX_STATE_SIZE);
 
   constructor(private nodeManager: NodeManager) {}
 
