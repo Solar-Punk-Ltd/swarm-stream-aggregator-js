@@ -126,7 +126,7 @@ export class LiveJanitor {
 
   private async readManifest(entry: StateEntry): Promise<ManifestUpdate | null> {
     try {
-      const feedReader = this.readerBee.makeFeedReader(Topic.fromString(entry.topic), entry.owner);
+      const feedReader = this.readerBee.feed.makeReader(Topic.fromString(entry.topic), entry.owner);
       const latestUpdate = await feedReader.downloadPayload();
 
       return {

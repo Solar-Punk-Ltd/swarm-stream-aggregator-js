@@ -1,9 +1,10 @@
-import { Bee, Bytes, FeedIndex, Identifier, PrivateKey, Topic } from '@ethersphere/bee-js';
+import { Bee, BeeError, Bytes, FeedIndex, GsocSubscription, Identifier, PrivateKey, Topic } from '@ethersphere/bee-js';
 import PQueue from 'p-queue';
 
 import { ErrorHandler } from '../libs/error.js';
 import { Logger } from '../libs/logger.js';
 import { StateArrayWithTimestamp } from '../types.js';
+import { reconnectDelayMs } from '../utils/backoff.js';
 import { getBooleanEnvVariable, getEnvVariable } from '../utils/common.js';
 
 import { AuthService } from './AuthService.js';
@@ -55,6 +56,11 @@ export class SwarmAggregator implements StateFeedAccess {
   private isInitialized = false;
   private isShuttingDown = false;
 
+  private gsocSubscription: GsocSubscription | null = null;
+  private gsocReconnectAttempt = 0;
+  private gsocReconnectTimer: NodeJS.Timeout | null = null;
+  private isGsocStopped = false;
+
   constructor() {
     this.gsocBee = new Bee(GSOC_BEE_URL, {
       headers: {
@@ -91,7 +97,7 @@ export class SwarmAggregator implements StateFeedAccess {
       this.logger.info(`init auth enabled: ${REQUIRE_AUTH}`);
       this.logger.info(`init waku enabled: ${IS_WAKU_ENABLED}`);
 
-      const feedReader = this.writerBee.makeFeedReader(topic, publicKey);
+      const feedReader = this.writerBee.feed.makeReader(topic, publicKey);
 
       await this.initializeWaku();
 
@@ -129,18 +135,56 @@ export class SwarmAggregator implements StateFeedAccess {
     }
   }
 
-  public subscribeToGsoc() {
+  public subscribeToGsoc(): GsocSubscription {
     const key = new PrivateKey(GSOC_RESOURCE_ID);
     const identifier = Identifier.fromString(GSOC_TOPIC);
 
-    const gsocSub = this.gsocBee.gsocSubscribe(key.publicKey().address(), identifier, {
-      onMessage: (message: Bytes) => this.queue.add(() => this.gsocCallback(message)),
-      onError: this.logger.error.bind(this.logger),
+    const subscription = this.gsocBee.messaging.gsocSubscribe(key.publicKey().address(), identifier, {
+      onMessage: (message: Bytes) => {
+        this.gsocReconnectAttempt = 0;
+        this.queue.add(() => this.gsocCallback(message));
+      },
+      onError: (error: BeeError) => this.logger.error('[GSOC] Subscription error:', error.message),
+      // Bee drops the socket whenever the gateway in front of it restarts, and a dropped socket is
+      // silent: no message ever arrives again. Reopen it, or the list stays frozen until a redeploy.
+      onClose: () => this.scheduleGsocResubscribe(),
     });
 
+    this.gsocSubscription = subscription;
     this.logger.info(`Subscribed to gsoc. Topic: ${GSOC_TOPIC} Resource ID: ${GSOC_RESOURCE_ID}`);
 
-    return gsocSub;
+    return subscription;
+  }
+
+  /** Closes the subscription for good; the close this causes must not reopen it. */
+  public unsubscribeFromGsoc(): void {
+    this.isGsocStopped = true;
+    if (this.gsocReconnectTimer) {
+      clearTimeout(this.gsocReconnectTimer);
+      this.gsocReconnectTimer = null;
+    }
+    this.gsocSubscription?.cancel();
+    this.gsocSubscription = null;
+  }
+
+  private scheduleGsocResubscribe(): void {
+    if (this.isGsocStopped || this.isShuttingDown || this.gsocReconnectTimer) {
+      return;
+    }
+
+    const delayMs = reconnectDelayMs(this.gsocReconnectAttempt);
+    this.gsocReconnectAttempt += 1;
+    this.logger.warn(`[GSOC] Subscription closed, resubscribing in ${delayMs} ms`);
+
+    this.gsocReconnectTimer = setTimeout(() => {
+      this.gsocReconnectTimer = null;
+      try {
+        this.subscribeToGsoc();
+      } catch (error) {
+        this.errorHandler.handleError(error, 'SwarmAggregator.scheduleGsocResubscribe');
+        this.scheduleGsocResubscribe();
+      }
+    }, delayMs);
   }
 
   public startLiveJanitor(): void {
@@ -188,7 +232,7 @@ export class SwarmAggregator implements StateFeedAccess {
 
     const topic = Topic.fromString(STREAM_TOPIC);
     const owner = this.streamSigner.publicKey().address();
-    const feedReader = this.writerBee.makeFeedReader(topic, owner);
+    const feedReader = this.writerBee.feed.makeReader(topic, owner);
 
     try {
       const data = await feedReader.downloadPayload({
@@ -243,7 +287,7 @@ export class SwarmAggregator implements StateFeedAccess {
 
   private async writeStateToFeed(state: StateArrayWithTimestamp): Promise<void> {
     const topic = Topic.fromString(STREAM_TOPIC);
-    const feedWriter = this.writerBee.makeFeedWriter(topic, this.streamSigner);
+    const feedWriter = this.writerBee.feed.makeWriter(topic, this.streamSigner);
     const nextIndex = this.index ? this.index.next() : FeedIndex.fromBigInt(BigInt(0));
 
     const promises: Promise<any>[] = [
