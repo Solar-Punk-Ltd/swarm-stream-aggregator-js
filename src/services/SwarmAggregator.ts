@@ -6,6 +6,7 @@ import { Logger } from '../libs/logger.js';
 import { StateArrayWithTimestamp } from '../types.js';
 import { reconnectDelayMs } from '../utils/backoff.js';
 import { getBooleanEnvVariable, getEnvVariable } from '../utils/common.js';
+import { encodeStatePayload } from '../utils/feedPayload.js';
 
 import { AuthService } from './AuthService.js';
 import { LiveJanitor, StateFeedAccess } from './LiveJanitor.js';
@@ -291,7 +292,7 @@ export class SwarmAggregator implements StateFeedAccess {
     const nextIndex = this.index ? this.index.next() : FeedIndex.fromBigInt(BigInt(0));
 
     const promises: Promise<any>[] = [
-      feedWriter.uploadPayload(STREAM_STAMP, JSON.stringify(state), {
+      feedWriter.uploadPayload(STREAM_STAMP, encodeStatePayload(state), {
         index: nextIndex,
       }),
     ];
