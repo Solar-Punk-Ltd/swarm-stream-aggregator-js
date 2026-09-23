@@ -1,3 +1,6 @@
+/* eslint-disable import/no-named-as-default-member -- protobufjs is CommonJS, so under Node ESM its classes
+   exist only on the default export. The named import this rule suggests fails at startup with
+   "Named export 'Field' not found", measured 2026-09-23. */
 import { PrivateKey } from '@ethersphere/bee-js';
 import { createLightNode, HealthStatus, type LightNode, ReliableChannel, WakuEvent } from '@solarpunkltd/waku-sdk';
 import crypto from 'crypto';

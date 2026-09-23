@@ -1,6 +1,6 @@
 import bs58 from 'bs58';
 import * as crypto from 'crypto';
-import messagepack from 'msgpack-lite';
+import { decode as decodeMsgpack, encode as encodeMsgpack } from 'msgpack-lite';
 import * as zlib from 'zlib';
 
 import { Logger } from '../libs/logger.js';
@@ -83,7 +83,7 @@ export class AuthService {
 
   public verifyAndDecrypt(token: string): VerifiedToken {
     const tokenBuffer = bs58.decode(token);
-    const tokenObject: TokenObject = messagepack.decode(tokenBuffer);
+    const tokenObject: TokenObject = decodeMsgpack(tokenBuffer);
 
     if (tokenObject.e < Date.now()) {
       throw new Error('Token expired');
@@ -119,7 +119,7 @@ export class AuthService {
       e: tokenObject.e,
     };
 
-    const signatureBuffer = messagepack.encode(dataToSign);
+    const signatureBuffer = encodeMsgpack(dataToSign);
 
     const expectedSignature = crypto.createHmac('sha256', userSecret).update(signatureBuffer).digest('hex');
 
@@ -139,6 +139,6 @@ export class AuthService {
 
     const decompressedBuffer = zlib.inflateSync(decryptedBuffer);
 
-    return messagepack.decode(decompressedBuffer) as DecryptedPayload;
+    return decodeMsgpack(decompressedBuffer) as DecryptedPayload;
   }
 }
