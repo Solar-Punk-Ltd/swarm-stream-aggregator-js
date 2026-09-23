@@ -32,7 +32,9 @@ describe('StateManager entry limit', () => {
     vi.clearAllMocks();
   });
 
-  it('holds ten non-external entries before evicting anything', () => {
+  const fullRollingList = () => Array.from({ length: 10 }, (_, i) => buildEntry(`s${i}`, { updatedAt: 1_000 + i }));
+
+  it('accepts a new entry while a rolling place is free', () => {
     const stateManager = new StateManager(nodeManager);
     const existing = Array.from({ length: 9 }, (_, i) => buildEntry(`s${i}`, { updatedAt: 1_000 + i }));
 
@@ -40,31 +42,49 @@ describe('StateManager entry limit', () => {
 
     expect(result.entries).toHaveLength(10);
     expect(topicsOf(result)).toContain('s0');
-  });
-
-  it('evicts the oldest unpinned non-external entry once full', () => {
-    const stateManager = new StateManager(nodeManager);
-    const existing = Array.from({ length: 10 }, (_, i) => buildEntry(`s${i}`, { updatedAt: 1_000 + i }));
-
-    const result = stateManager.createEntry(buildState(existing), buildEntry('new'));
-
-    expect(result.entries).toHaveLength(10);
-    expect(topicsOf(result)).not.toContain('s0');
     expect(topicsOf(result)).toContain('new');
   });
 
-  it('never evicts external entries and does not count them towards the limit', () => {
+  it('refuses a new entry once every rolling place is taken, and removes nothing', () => {
+    const stateManager = new StateManager(nodeManager);
+    const state = buildState(fullRollingList());
+
+    expect(() => stateManager.createEntry(state, buildEntry('new'))).toThrow(/stream list is full/i);
+    expect(topicsOf(state)).toEqual(fullRollingList().map(entry => entry.topic));
+  });
+
+  it('never pushes out a scheduled event to make room', () => {
     const stateManager = new StateManager(nodeManager);
     const existing = [
-      ...Array.from({ length: 10 }, (_, i) => buildEntry(`s${i}`, { updatedAt: 1_000 + i })),
-      buildEntry('ext', { isExternal: true, updatedAt: 1 }),
+      buildEntry('scheduled-call', { state: StateType.SCHEDULED, updatedAt: 1 }),
+      ...Array.from({ length: 9 }, (_, i) => buildEntry(`s${i}`, { updatedAt: 1_000 + i })),
+    ];
+    const state = buildState(existing);
+
+    expect(() => stateManager.createEntry(state, buildEntry('new'))).toThrow(/stream list is full/i);
+    expect(topicsOf(state)).toContain('scheduled-call');
+  });
+
+  it('still accepts an archived (external) entry when the rolling places are full', () => {
+    const stateManager = new StateManager(nodeManager);
+
+    const result = stateManager.createEntry(buildState(fullRollingList()), buildEntry('ext', { isExternal: true }));
+
+    expect(topicsOf(result)).toContain('ext');
+    expect(result.entries.filter(entry => !entry.isExternal)).toHaveLength(10);
+  });
+
+  it('does not count archived (external) entries towards the limit', () => {
+    const stateManager = new StateManager(nodeManager);
+    const existing = [
+      ...Array.from({ length: 9 }, (_, i) => buildEntry(`s${i}`, { updatedAt: 1_000 + i })),
+      ...Array.from({ length: 5 }, (_, i) => buildEntry(`ext${i}`, { isExternal: true, updatedAt: 1 })),
     ];
 
     const result = stateManager.createEntry(buildState(existing), buildEntry('new'));
 
-    expect(topicsOf(result)).toContain('ext');
-    expect(topicsOf(result)).not.toContain('s0');
-    expect(result.entries.filter(entry => !entry.isExternal)).toHaveLength(10);
+    expect(topicsOf(result)).toContain('new');
+    expect(result.entries).toHaveLength(15);
   });
 
   it('reads the limit from MAX_STATE_SIZE', () => {
@@ -72,10 +92,7 @@ describe('StateManager entry limit', () => {
     const stateManager = new StateManager(nodeManager);
     const existing = Array.from({ length: 3 }, (_, i) => buildEntry(`s${i}`, { updatedAt: 1_000 + i }));
 
-    const result = stateManager.createEntry(buildState(existing), buildEntry('new'));
-
-    expect(result.entries).toHaveLength(3);
-    expect(topicsOf(result)).not.toContain('s0');
+    expect(() => stateManager.createEntry(buildState(existing), buildEntry('new'))).toThrow(/all 3 rolling places/i);
   });
 });
 
